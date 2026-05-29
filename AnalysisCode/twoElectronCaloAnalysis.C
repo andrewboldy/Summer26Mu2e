@@ -12,7 +12,9 @@
 //        - track-associated calorimeter cluster information from trkcalohit
 //        - event-level calorimeter clusters
 //        - crystal-hit energies belonging to each cluster
-//   4. Also draw and save a blank two-disk calorimeter map through CaloHitter.
+//   4. Make calorimeter-energy histograms specifically for the two selected
+//      reconstructed electron tracks.
+//   5. Also draw and save a blank two-disk calorimeter map through CaloHitter.
 //
 // Coordinate note:
 //   EventNtuple stores caloclusters.cog_ in the calorimeter disk front-face
@@ -143,6 +145,32 @@ void twoElectronCaloAnalysis(const string& generatorName,
     "Track-calo POCA z position;z [mm];Matched rank-0 electron tracks",
     240, -12000.0, 12000.0);
 
+  // Dedicated two-electron calorimeter-energy histograms.
+  //
+  // These are the electron-count-like plots: they are filled only from the two
+  // selected reconstructed rank-0 electron tracks in the event, using the
+  // calorimeter energy in the track-matched trkcalohit object.
+  TH1F* hTwoElectronTrackCaloEnergyAll = new TH1F(
+    "hTwoElectronTrackCaloEnergyAll",
+    "Two-track events: electron calorimeter energy;E_{calo} [MeV];Selected reconstructed electrons",
+    150, 0.0, 150.0);
+  TH1F* hTwoElectronTrackCaloEnergyElectron0 = new TH1F(
+    "hTwoElectronTrackCaloEnergyElectron0",
+    "Two-track events: electron 0 calorimeter energy;E_{calo} [MeV];Events",
+    150, 0.0, 150.0);
+  TH1F* hTwoElectronTrackCaloEnergyElectron1 = new TH1F(
+    "hTwoElectronTrackCaloEnergyElectron1",
+    "Two-track events: electron 1 calorimeter energy;E_{calo} [MeV];Events",
+    150, 0.0, 150.0);
+  TH1F* hTwoElectronTrackCaloEnergySum = new TH1F(
+    "hTwoElectronTrackCaloEnergySum",
+    "Two-track events: summed electron calorimeter energy;E_{calo,0}+E_{calo,1} [MeV];Events",
+    180, 0.0, 300.0);
+  TH2F* hTwoElectronTrackCaloEnergyPair = new TH2F(
+    "hTwoElectronTrackCaloEnergyPair",
+    "Two-track events: electron calorimeter energy pair;electron 0 E_{calo} [MeV];electron 1 E_{calo} [MeV]",
+    150, 0.0, 150.0, 150, 0.0, 150.0);
+
   // Event-level reconstructed calorimeter cluster histograms.
   //
   // caloclusters stores reconstructed energy and COG position.  EventNtuple's
@@ -201,6 +229,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
   long long printedCrystalHitCount = 0;
   long long selectedEventsWithoutCaloClusters = 0;
   long long selectedRank0TracksWithoutCalo = 0;
+  long long twoElectronTrackCaloEnergyFills = 0;
+  long long selectedEventsWithBothElectronCaloEnergies = 0;
 
   // Main EventNtuple loop.  Each event is examined independently, then rejected
   // unless it has exactly two reconstructed e- tracks with valid rank-0 truth.
@@ -297,6 +327,9 @@ void twoElectronCaloAnalysis(const string& generatorName,
 
     // Print one block per selected rank-0 electron.  This is the track-level
     // view: MC truth momentum plus the optional reconstructed track-calo match.
+    double twoElectronCaloEnergies[2] = {-1.0, -1.0};
+    bool hasTwoElectronCaloEnergy[2] = {false, false};
+
     for (size_t i_electron = 0; i_electron < rank0ElectronTracks.size(); ++i_electron)
     {
       const auto& electronTrack = rank0ElectronTracks.at(i_electron);
@@ -338,6 +371,25 @@ void twoElectronCaloAnalysis(const string& generatorName,
       hTrackCaloPOCAXY->Fill(trkcalohit->poca.x(), trkcalohit->poca.y());
       hTrackCaloPOCAZ->Fill(trkcalohit->poca.z());
 
+      // Fill the electron-specific calorimeter-energy plots.  These are not
+      // crystal-hit counts; each fill corresponds to one of the two selected
+      // reconstructed electron tracks.
+      hTwoElectronTrackCaloEnergyAll->Fill(trkcalohit->edep);
+      if (i_electron == 0)
+      {
+        hTwoElectronTrackCaloEnergyElectron0->Fill(trkcalohit->edep);
+      }
+      else if (i_electron == 1)
+      {
+        hTwoElectronTrackCaloEnergyElectron1->Fill(trkcalohit->edep);
+      }
+      if (i_electron < 2)
+      {
+        twoElectronCaloEnergies[i_electron] = trkcalohit->edep;
+        hasTwoElectronCaloEnergy[i_electron] = true;
+      }
+      ++twoElectronTrackCaloEnergyFills;
+
       if (printThisEvent)
       {
         ++printedTrackCaloCount;
@@ -359,6 +411,15 @@ void twoElectronCaloAnalysis(const string& generatorName,
            << " doca=" << trkcalohit->doca
            << " dt=" << trkcalohit->dt;
       printSelectedLine(line.str());
+    }
+
+    // Pair-level two-electron calorimeter observables are filled only when both
+    // selected reconstructed electrons have valid track-associated calo energy.
+    if (hasTwoElectronCaloEnergy[0] && hasTwoElectronCaloEnergy[1])
+    {
+      hTwoElectronTrackCaloEnergySum->Fill(twoElectronCaloEnergies[0] + twoElectronCaloEnergies[1]);
+      hTwoElectronTrackCaloEnergyPair->Fill(twoElectronCaloEnergies[0], twoElectronCaloEnergies[1]);
+      ++selectedEventsWithBothElectronCaloEnergies;
     }
 
     // The event-level caloclusters collection contains calorimeter clusters
@@ -481,7 +542,10 @@ void twoElectronCaloAnalysis(const string& generatorName,
              << "# printed_clusters " << printedClusterCount << '\n'
              << "# printed_crystal_hits " << printedCrystalHitCount << '\n'
              << "# selected_events_without_calo_clusters " << selectedEventsWithoutCaloClusters << '\n'
+             << "# two_electron_track_calo_energy_fills " << twoElectronTrackCaloEnergyFills << '\n'
+             << "# selected_events_with_both_electron_calo_energies " << selectedEventsWithBothElectronCaloEnergies << '\n'
              << "# histogram_track_calo_entries " << hTrackCaloEnergy->GetEntries() << '\n'
+             << "# histogram_two_electron_track_calo_entries " << hTwoElectronTrackCaloEnergyAll->GetEntries() << '\n'
              << "# histogram_cluster_entries " << hClusterEnergy->GetEntries() << '\n'
              << "# histogram_crystal_hit_entries " << hCrystalHitEnergy->GetEntries() << '\n';
 
@@ -497,6 +561,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
   cout << "  event-level calo clusters printed: " << printedClusterCount << endl;
   cout << "  crystal-hit energy lines printed: " << printedCrystalHitCount << endl;
   cout << "  selected events without calo clusters: " << selectedEventsWithoutCaloClusters << endl;
+  cout << "  two-electron track-calo energy histogram fills: " << twoElectronTrackCaloEnergyFills << endl;
+  cout << "  selected events with both electron calo energies: " << selectedEventsWithBothElectronCaloEnergies << endl;
   cout << "Wrote text output to " << outputFileName << endl;
 
   // Write the ROOT histograms to a file so the plotted distributions can be
@@ -510,6 +576,11 @@ void twoElectronCaloAnalysis(const string& generatorName,
     hTrackCaloMomentum->Write();
     hTrackCaloPOCAXY->Write();
     hTrackCaloPOCAZ->Write();
+    hTwoElectronTrackCaloEnergyAll->Write();
+    hTwoElectronTrackCaloEnergyElectron0->Write();
+    hTwoElectronTrackCaloEnergyElectron1->Write();
+    hTwoElectronTrackCaloEnergySum->Write();
+    hTwoElectronTrackCaloEnergyPair->Write();
     hClusterEnergy->Write();
     hClusterTime->Write();
     hClusterZ->Write();
@@ -545,6 +616,23 @@ void twoElectronCaloAnalysis(const string& generatorName,
   hTrackCaloPOCAZ->Draw("HIST");
   cTrackCalo->SaveAs(trackCaloPdfName.c_str());
 
+  const string twoElectronTrackCaloPdfName =
+    caloPlotsDirectory + "/twoElectronCaloAnalysis_" + generatorName + "_TwoElectronTrackCaloEnergy.pdf";
+  TCanvas* cTwoElectronTrackCalo = new TCanvas(
+    "cTwoElectronTrackCalo",
+    "Two selected reconstructed electrons: calorimeter energy",
+    1400, 1000);
+  cTwoElectronTrackCalo->Divide(2, 2);
+  cTwoElectronTrackCalo->cd(1);
+  hTwoElectronTrackCaloEnergyAll->Draw("HIST");
+  cTwoElectronTrackCalo->cd(2);
+  hTwoElectronTrackCaloEnergyElectron0->Draw("HIST");
+  cTwoElectronTrackCalo->cd(3);
+  hTwoElectronTrackCaloEnergyElectron1->Draw("HIST");
+  cTwoElectronTrackCalo->cd(4);
+  hTwoElectronTrackCaloEnergyPair->Draw("COLZ");
+  cTwoElectronTrackCalo->SaveAs(twoElectronTrackCaloPdfName.c_str());
+
   const string clusterPdfName =
     caloPlotsDirectory + "/twoElectronCaloAnalysis_" + generatorName + "_RecoCaloClusters.pdf";
   TCanvas* cClusters = new TCanvas(
@@ -579,6 +667,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
 
   cout << "Wrote calorimeter PDF plots to:" << endl;
   cout << "  " << trackCaloPdfName << endl;
+  cout << "  " << twoElectronTrackCaloPdfName << endl;
   cout << "  " << clusterPdfName << endl;
   cout << "  " << crystalPdfName << endl;
 
@@ -599,3 +688,4 @@ void twoElectronCaloAnalysis(const string& generatorName,
   TH1::AddDirectory(oldAddDirectoryStatus);
   gROOT->SetBatch(wasBatchMode);
 }
+
