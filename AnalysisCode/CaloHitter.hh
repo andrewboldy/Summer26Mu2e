@@ -42,6 +42,7 @@
 #include <TPad.h>
 #include <TROOT.h>
 #include <TStyle.h>
+#include <TSystem.h>
 
 namespace calohitter {
 
@@ -67,6 +68,21 @@ struct Calorimeter {
   Calorimeter() = default;
   explicit Calorimeter(const int diskNumber) : number(diskNumber) {}
 };
+
+// Human-facing disk labels.  Keep the raw Mu2e disk numbers internally because
+// crystal IDs and EventNtuple disk IDs use 0 and 1.  Only plot/text labels are
+// translated to Front and Back for readability.
+inline std::string diskShortLabel(const int diskNumber)
+{
+  if (diskNumber == 0) return "Front";
+  if (diskNumber == 1) return "Back";
+  return "Unknown";
+}
+
+inline std::string diskDisplayLabel(const int diskNumber)
+{
+  return diskShortLabel(diskNumber) + " disk (raw ID " + std::to_string(diskNumber) + ")";
+}
 
 // Internal drawing/geometry record.  CaloCrystal only stores crystalNumber for
 // now, but the drawing needs x/y placement, local crystal number, and row.
@@ -109,6 +125,7 @@ static const double kCrystalXYLength = 34.0;      // mm
 static const double kWrapperThickness = 0.150;    // mm
 static const double kCellSize = kCrystalXYLength + 2.0 * kWrapperThickness;
 static const double kDrawRange = 725.0;           // mm
+static const char* kDefaultPlotDirectory = "Plots/CaloHitPlots";
 
 // Step directions used to walk around each ring of the shifted-square lattice.
 // These mirror SquareShiftMapper.cc in Offline/CalorimeterGeom.
@@ -288,6 +305,21 @@ inline void drawOwnedLatex(const double x, const double y, const std::string& te
   latex->Draw("same");
 }
 
+// ROOT's canvas printing does not create missing directories.  Before writing a
+// PDF, extract the parent directory from the output path and create it.
+inline void ensureOutputDirectory(const std::string& outputPath)
+{
+  const std::string::size_type slashPosition = outputPath.find_last_of("/\\");
+  if (slashPosition == std::string::npos) {
+    return;
+  }
+
+  const std::string outputDirectory = outputPath.substr(0, slashPosition);
+  if (!outputDirectory.empty() && gSystem != nullptr) {
+    gSystem->mkdir(outputDirectory.c_str(), true);
+  }
+}
+
 }  // namespace detail
 
 // Build the full list of drawable crystal placements for one disk.  This is the
@@ -384,7 +416,7 @@ inline void drawCalorimeterDisk(const Calorimeter& calorimeter)
   gPad->SetTopMargin(0.08);
   gPad->SetBottomMargin(0.10);
 
-  const std::string title = "Calorimeter disk " + std::to_string(calorimeter.number) +
+  const std::string title = "Calorimeter " + diskDisplayLabel(calorimeter.number) +
                             ";disk-local x [mm];disk-local y [mm]";
   gPad->DrawFrame(-detail::kDrawRange, -detail::kDrawRange,
                   detail::kDrawRange, detail::kDrawRange, title.c_str());
@@ -410,13 +442,13 @@ inline void drawCalorimeterDisk(const Calorimeter& calorimeter)
 
   // Small label confirming which disk is shown and how many crystals were built.
   detail::drawOwnedLatex(-690.0, 665.0,
-                         "Disk " + std::to_string(calorimeter.number) +
+                         diskDisplayLabel(calorimeter.number) +
                            "  crystals: " + std::to_string(calorimeter.crystals.size()),
                          0.032, 11);
 }
 
 // Draw all supplied Calorimeter objects on one canvas.  For the current Mu2e
-// geometry this makes a two-panel canvas: disk 0 on the left, disk 1 on the right.
+// geometry this makes a two-panel canvas: Front disk on the left, Back disk on the right.
 inline TCanvas* drawCalorimeterDisks(const std::vector<Calorimeter>& calorimeters,
                                      const std::string& canvasName = "cCaloHitter")
 {
@@ -439,7 +471,9 @@ inline TCanvas* drawCalorimeterDisks(const std::vector<Calorimeter>& calorimeter
 
 // Convenience entry point for scripts and macros.  It builds the blank
 // calorimeter, draws it, saves the canvas as a PDF, and prints a count summary.
-inline TCanvas* saveCalorimeterPdf(const std::string& outputPdf = "CaloHitter_CalorimeterDisks.pdf")
+inline TCanvas* saveCalorimeterPdf(const std::string& outputPdf =
+                                     std::string(detail::kDefaultPlotDirectory) +
+                                     "/CaloHitter_CalorimeterDisks.pdf")
 {
   // Batch mode prevents ROOT from opening GUI windows when the macro is run from
   // a terminal or batch job.  Restore the user's previous setting before return.
@@ -448,13 +482,14 @@ inline TCanvas* saveCalorimeterPdf(const std::string& outputPdf = "CaloHitter_Ca
 
   const std::vector<Calorimeter> calorimeters = buildCalorimeters();
   TCanvas* canvas = drawCalorimeterDisks(calorimeters);
+  detail::ensureOutputDirectory(outputPdf);
   canvas->Print(outputPdf.c_str());
 
   // Print disk and total counts so the terminal output confirms the geometry.
   int totalCrystals = 0;
   for (const Calorimeter& calorimeter : calorimeters) {
     totalCrystals += static_cast<int>(calorimeter.crystals.size());
-    std::cout << "CaloHitter disk " << calorimeter.number
+    std::cout << "CaloHitter " << diskDisplayLabel(calorimeter.number)
               << ": " << calorimeter.crystals.size() << " crystals" << std::endl;
   }
   std::cout << "CaloHitter total crystals: " << totalCrystals << std::endl;

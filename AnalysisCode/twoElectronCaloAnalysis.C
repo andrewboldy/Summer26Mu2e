@@ -31,8 +31,17 @@
 #include <string>
 #include <vector>
 
-// ROOT timing utility.  This lets the macro report how long the ntuple loop took.
+// ROOT plotting and output utilities.  TH1F/TH2F hold the histograms, TCanvas
+// saves them as PDFs, TFile writes a ROOT histogram file, and TSystem creates
+// the plot directory if needed.
+#include <TCanvas.h>
+#include <TFile.h>
+#include <TH1.h>
+#include <TH1F.h>
+#include <TH2F.h>
+#include <TROOT.h>
 #include <TStopwatch.h>
+#include <TSystem.h>
 
 // RooUtil opens EventNtuple files and exposes the event content through simple
 // C++ objects.  common_cuts.hh gives helper functions like is_e_minus(track).
@@ -64,6 +73,13 @@ void twoElectronCaloAnalysis(const string& generatorName,
   TStopwatch timer;
   timer.Start();
 
+  // Keep ROOT plotting non-interactive.  This is important when running on a VM
+  // or in batch because canvases otherwise try to open GUI windows.
+  const bool wasBatchMode = gROOT->IsBatch();
+  const bool oldAddDirectoryStatus = TH1::AddDirectoryStatus();
+  gROOT->SetBatch(true);
+  TH1::AddDirectory(false);
+
   // RooUtil accepts either a ROOT file path or a filelist.  From here on, the
   // code treats every entry as one EventNtuple event.
   RooUtil util(fileName);
@@ -77,6 +93,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
   if (!outputFile.is_open())
   {
     cerr << "ERROR: could not create output text file: " << outputFileName << endl;
+    TH1::AddDirectory(oldAddDirectoryStatus);
+    gROOT->SetBatch(wasBatchMode);
     return;
   }
 
@@ -84,6 +102,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
              << "# Selected event definition: exactly two valid rank-0 trkmcsim electrons among reconstructed e-minus tracks.\n"
              << "# Cluster coordinates are caloclusters.cog_ in the calorimeter disk front-face frame.\n"
              << "# Crystal-hit lines use parent cluster COG xyz because EventNtuple calohits do not store per-crystal xyz.\n"
+             << "# Calorimeter momentum is represented by the matched reconstructed track momentum from trkcalohit.mom.\n"
+             << "# Disk labels: raw disk 0 = Front, raw disk 1 = Back.\n"
              << "# Units: energy in MeV, position in mm.\n";
 
   // Print every analysis line both to the terminal and to the output text file.
@@ -92,6 +112,75 @@ void twoElectronCaloAnalysis(const string& generatorName,
     cout << line << endl;
     outputFile << line << '\n';
   };
+
+  // All calorimeter plots for this analysis live in the requested subdirectory.
+  // The CaloHitter module also uses this directory for geometry-only disk plots.
+  const string caloPlotsDirectory = "Plots/CaloHitPlots";
+  if (gSystem != nullptr)
+  {
+    gSystem->mkdir(caloPlotsDirectory.c_str(), true);
+  }
+
+  // Track-associated calorimeter histograms.
+  //
+  // These use trkcalohit, which is the reconstructed track-to-calo match.  The
+  // energy is the matched calorimeter energy.  The momentum and POCA position
+  // are the reconstructed track state at the calorimeter association.
+  TH1F* hTrackCaloEnergy = new TH1F(
+    "hTrackCaloEnergy",
+    "Track-associated calorimeter energy;E_{calo} [MeV];Matched rank-0 electron tracks",
+    150, 0.0, 150.0);
+  TH1F* hTrackCaloMomentum = new TH1F(
+    "hTrackCaloMomentum",
+    "Track momentum at calorimeter association;p_{track} [MeV/c];Matched rank-0 electron tracks",
+    150, 0.0, 150.0);
+  TH2F* hTrackCaloPOCAXY = new TH2F(
+    "hTrackCaloPOCAXY",
+    "Track-calo POCA position;x [mm];y [mm]",
+    200, -1000.0, 1000.0, 200, -1000.0, 1000.0);
+  TH1F* hTrackCaloPOCAZ = new TH1F(
+    "hTrackCaloPOCAZ",
+    "Track-calo POCA z position;z [mm];Matched rank-0 electron tracks",
+    240, -12000.0, 12000.0);
+
+  // Event-level reconstructed calorimeter cluster histograms.
+  //
+  // caloclusters stores reconstructed energy and COG position.  EventNtuple's
+  // COG is in the calorimeter disk front-face frame, not global Mu2e xyz.
+  TH1F* hClusterEnergy = new TH1F(
+    "hClusterEnergy",
+    "Reconstructed calorimeter cluster energy;E_{cluster} [MeV];Clusters",
+    150, 0.0, 150.0);
+  TH1F* hClusterTime = new TH1F(
+    "hClusterTime",
+    "Reconstructed calorimeter cluster time;t_{cluster} [ns];Clusters",
+    240, 0.0, 2400.0);
+  TH1F* hClusterZ = new TH1F(
+    "hClusterZ",
+    "Reconstructed calorimeter cluster COG z;COG z [mm];Clusters",
+    200, -1000.0, 1000.0);
+  TH2F* hClusterXYByDisk[2] = {
+    new TH2F(
+      "hClusterXYDisk0",
+      "Reconstructed cluster COG, Front disk;disk-local x [mm];disk-local y [mm]",
+      200, -800.0, 800.0, 200, -800.0, 800.0),
+    new TH2F(
+      "hClusterXYDisk1",
+      "Reconstructed cluster COG, Back disk;disk-local x [mm];disk-local y [mm]",
+      200, -800.0, 800.0, 200, -800.0, 800.0)
+  };
+
+  // Crystal-hit histograms.  These use event.calohits, which provides crystal ID
+  // and deposited energy.  The energy-by-ID histogram is the bridge to the
+  // future CaloHitter overlay: each x bin corresponds to one calorimeter crystal.
+  TH1F* hCrystalHitEnergy = new TH1F(
+    "hCrystalHitEnergy",
+    "Calorimeter crystal-hit energy;E_{hit} [MeV];Crystal hits",
+    150, 0.0, 150.0);
+  TH1F* hCrystalEnergyById = new TH1F(
+    "hCrystalEnergyById",
+    "Summed crystal-hit energy by crystal ID;crystal ID;#Sigma E_{hit} [MeV]",
+    1348, -0.5, 1347.5);
 
   // Small local record for the two electrons we are trying to identify.  It
   // keeps the reconstructed track index, its rank-0 MC truth match, and the
@@ -167,14 +256,22 @@ void twoElectronCaloAnalysis(const string& generatorName,
     ++selectedEventCount;
 
     // A negative maxSelectedEventsToPrint means "print all selected events".
-    // Nonnegative values are useful when checking very large samples.
-    if (maxSelectedEventsToPrint >= 0 && printedSelectedEventCount >= maxSelectedEventsToPrint)
-    {
-      continue;
-    }
+    // Nonnegative values limit only the text dump; histograms still use every
+    // selected event so plotted distributions are not biased by the print limit.
+    const bool printThisEvent =
+      (maxSelectedEventsToPrint < 0 || printedSelectedEventCount < maxSelectedEventsToPrint);
+    auto printSelectedLine = [&printLine, printThisEvent](const string& line) {
+      if (printThisEvent)
+      {
+        printLine(line);
+      }
+    };
 
-    ++printedSelectedEventCount;
-    printedRank0ElectronCount += rank0ElectronTracks.size();
+    if (printThisEvent)
+    {
+      ++printedSelectedEventCount;
+      printedRank0ElectronCount += rank0ElectronTracks.size();
+    }
 
     int run = -1;
     int subrun = -1;
@@ -195,7 +292,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
            << " subrun=" << subrun
            << " event=" << eventNumber
            << " rank0_electrons=" << rank0ElectronTracks.size();
-      printLine(line.str());
+      printSelectedLine(line.str());
     }
 
     // Print one block per selected rank-0 electron.  This is the track-level
@@ -217,7 +314,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
              << (sim != nullptr ? sim->mom.x() : 0.0) << ", "
              << (sim != nullptr ? sim->mom.y() : 0.0) << ", "
              << (sim != nullptr ? sim->mom.z() : 0.0) << ")";
-        printLine(line.str());
+        printSelectedLine(line.str());
       }
 
       // trkcalohit is the track-associated calorimeter result.  It is not the
@@ -229,17 +326,26 @@ void twoElectronCaloAnalysis(const string& generatorName,
         ostringstream line;
         line << "    TRACK_CALO no associated calorimeter cluster for trk_index="
              << electronTrack.trackIndex;
-        printLine(line.str());
+        printSelectedLine(line.str());
         continue;
       }
 
       // did is the disk ID.  edep is the matched calorimeter energy.  poca is
       // the point of closest approach information carried by the track-calo
       // association, not a per-crystal center position.
-      ++printedTrackCaloCount;
+      hTrackCaloEnergy->Fill(trkcalohit->edep);
+      hTrackCaloMomentum->Fill(trkcalohit->mom.R());
+      hTrackCaloPOCAXY->Fill(trkcalohit->poca.x(), trkcalohit->poca.y());
+      hTrackCaloPOCAZ->Fill(trkcalohit->poca.z());
+
+      if (printThisEvent)
+      {
+        ++printedTrackCaloCount;
+      }
       ostringstream line;
       line << "    TRACK_CALO"
            << " disk=" << trkcalohit->did
+           << " disk_label=" << calohitter::diskShortLabel(trkcalohit->did)
            << " energy=" << fixed << setprecision(6) << trkcalohit->edep
            << " energyErr=" << trkcalohit->edeperr
            << " active=" << trkcalohit->active
@@ -247,9 +353,12 @@ void twoElectronCaloAnalysis(const string& generatorName,
            << ", " << trkcalohit->poca.y()
            << ", " << trkcalohit->poca.z() << ")"
            << " track_mom=" << trkcalohit->mom.R()
+           << " track_mom_xyz=(" << trkcalohit->mom.x()
+           << ", " << trkcalohit->mom.y()
+           << ", " << trkcalohit->mom.z() << ")"
            << " doca=" << trkcalohit->doca
            << " dt=" << trkcalohit->dt;
-      printLine(line.str());
+      printSelectedLine(line.str());
     }
 
     // The event-level caloclusters collection contains calorimeter clusters
@@ -258,12 +367,12 @@ void twoElectronCaloAnalysis(const string& generatorName,
     if (event.caloclusters == nullptr)
     {
       ++selectedEventsWithoutCaloClusters;
-      printLine("  CALO_CLUSTER branch missing or disabled for this event.");
+      printSelectedLine("  CALO_CLUSTER branch missing or disabled for this event.");
     }
     else if (event.caloclusters->empty())
     {
       ++selectedEventsWithoutCaloClusters;
-      printLine("  CALO_CLUSTER no reconstructed calorimeter clusters in this event.");
+      printSelectedLine("  CALO_CLUSTER no reconstructed calorimeter clusters in this event.");
     }
     else
     {
@@ -271,7 +380,18 @@ void twoElectronCaloAnalysis(const string& generatorName,
       for (size_t i_cluster = 0; i_cluster < event.caloclusters->size(); ++i_cluster)
       {
         const auto& cluster = event.caloclusters->at(i_cluster);
-        ++printedClusterCount;
+        hClusterEnergy->Fill(cluster.energyDep_);
+        hClusterTime->Fill(cluster.time_);
+        hClusterZ->Fill(cluster.cog_.z());
+        if (cluster.diskID_ >= 0 && cluster.diskID_ < 2)
+        {
+          hClusterXYByDisk[cluster.diskID_]->Fill(cluster.cog_.x(), cluster.cog_.y());
+        }
+
+        if (printThisEvent)
+        {
+          ++printedClusterCount;
+        }
 
         {
           // Cluster COG is stored in the calorimeter disk front-face coordinate
@@ -280,6 +400,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
           line << "  CALO_CLUSTER"
                << " cluster_index=" << i_cluster
                << " disk=" << cluster.diskID_
+               << " disk_label=" << calohitter::diskShortLabel(cluster.diskID_)
                << " energy=" << fixed << setprecision(6) << cluster.energyDep_
                << " energyErr=" << cluster.energyDepErr_
                << " time=" << cluster.time_
@@ -288,7 +409,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
                << " cog_xyz=(" << cluster.cog_.x()
                << ", " << cluster.cog_.y()
                << ", " << cluster.cog_.z() << ")";
-          printLine(line.str());
+          printSelectedLine(line.str());
         }
 
         // The cluster owns a list of indices into event.calohits.  Without the
@@ -296,7 +417,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
         // descend to individual crystal-hit energies.
         if (event.calohits == nullptr)
         {
-          printLine("    CRYSTAL_HIT calohits branch missing or disabled; cannot print per-crystal energies.");
+          printSelectedLine("    CRYSTAL_HIT calohits branch missing or disabled; cannot print per-crystal energies.");
           continue;
         }
 
@@ -310,12 +431,21 @@ void twoElectronCaloAnalysis(const string& generatorName,
             ostringstream line;
             line << "    CRYSTAL_HIT invalid hit index " << hitIndex
                  << " for cluster_index=" << i_cluster;
-            printLine(line.str());
+            printSelectedLine(line.str());
             continue;
           }
 
           const auto& hit = event.calohits->at(hitIndex);
-          ++printedCrystalHitCount;
+          hCrystalHitEnergy->Fill(hit.eDep_);
+          if (hit.crystalId_ >= 0 && hit.crystalId_ < 1348)
+          {
+            hCrystalEnergyById->Fill(hit.crystalId_, hit.eDep_);
+          }
+
+          if (printThisEvent)
+          {
+            ++printedCrystalHitCount;
+          }
 
           // EventNtuple calohits do not include the crystal center xyz directly.
           // For now, the printed xyz is the parent cluster COG.  CaloHitter will
@@ -326,6 +456,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
                << " crystal_id=" << hit.crystalId_
                << " parent_cluster=" << hit.clusterIdx_
                << " disk=" << cluster.diskID_
+               << " disk_label=" << calohitter::diskShortLabel(cluster.diskID_)
                << " energy=" << fixed << setprecision(6) << hit.eDep_
                << " energyErr=" << hit.eDepErr_
                << " time=" << hit.time_
@@ -333,7 +464,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
                << " parent_cluster_cog_xyz=(" << cluster.cog_.x()
                << ", " << cluster.cog_.y()
                << ", " << cluster.cog_.z() << ")";
-          printLine(line.str());
+          printSelectedLine(line.str());
         }
       }
     }
@@ -349,7 +480,10 @@ void twoElectronCaloAnalysis(const string& generatorName,
              << "# selected_rank0_tracks_without_track_calo " << selectedRank0TracksWithoutCalo << '\n'
              << "# printed_clusters " << printedClusterCount << '\n'
              << "# printed_crystal_hits " << printedCrystalHitCount << '\n'
-             << "# selected_events_without_calo_clusters " << selectedEventsWithoutCaloClusters << '\n';
+             << "# selected_events_without_calo_clusters " << selectedEventsWithoutCaloClusters << '\n'
+             << "# histogram_track_calo_entries " << hTrackCaloEnergy->GetEntries() << '\n'
+             << "# histogram_cluster_entries " << hClusterEnergy->GetEntries() << '\n'
+             << "# histogram_crystal_hit_entries " << hCrystalHitEnergy->GetEntries() << '\n';
 
   outputFile.close();
 
@@ -365,11 +499,95 @@ void twoElectronCaloAnalysis(const string& generatorName,
   cout << "  selected events without calo clusters: " << selectedEventsWithoutCaloClusters << endl;
   cout << "Wrote text output to " << outputFileName << endl;
 
+  // Write the ROOT histograms to a file so the plotted distributions can be
+  // reopened, rebinned, or overlaid later without rerunning the ntuple loop.
+  const string histogramRootFileName =
+    caloPlotsDirectory + "/twoElectronCaloAnalysis_" + generatorName + "_RecoCaloHistograms.root";
+  TFile histogramFile(histogramRootFileName.c_str(), "RECREATE");
+  if (!histogramFile.IsZombie())
+  {
+    hTrackCaloEnergy->Write();
+    hTrackCaloMomentum->Write();
+    hTrackCaloPOCAXY->Write();
+    hTrackCaloPOCAZ->Write();
+    hClusterEnergy->Write();
+    hClusterTime->Write();
+    hClusterZ->Write();
+    hClusterXYByDisk[0]->Write();
+    hClusterXYByDisk[1]->Write();
+    hCrystalHitEnergy->Write();
+    hCrystalEnergyById->Write();
+    histogramFile.Close();
+    cout << "Wrote calorimeter histogram ROOT file to " << histogramRootFileName << endl;
+  }
+  else
+  {
+    cerr << "ERROR: could not create calorimeter histogram ROOT file: "
+         << histogramRootFileName << endl;
+  }
+
+  // Save a compact set of PDF plots for the reconstructed calorimeter
+  // observables now available in the ntuple.
+  const string trackCaloPdfName =
+    caloPlotsDirectory + "/twoElectronCaloAnalysis_" + generatorName + "_TrackMatchedCalo.pdf";
+  TCanvas* cTrackCalo = new TCanvas(
+    "cTrackCalo",
+    "Track-associated calorimeter quantities",
+    1400, 1000);
+  cTrackCalo->Divide(2, 2);
+  cTrackCalo->cd(1);
+  hTrackCaloEnergy->Draw("HIST");
+  cTrackCalo->cd(2);
+  hTrackCaloMomentum->Draw("HIST");
+  cTrackCalo->cd(3);
+  hTrackCaloPOCAXY->Draw("COLZ");
+  cTrackCalo->cd(4);
+  hTrackCaloPOCAZ->Draw("HIST");
+  cTrackCalo->SaveAs(trackCaloPdfName.c_str());
+
+  const string clusterPdfName =
+    caloPlotsDirectory + "/twoElectronCaloAnalysis_" + generatorName + "_RecoCaloClusters.pdf";
+  TCanvas* cClusters = new TCanvas(
+    "cClusters",
+    "Reconstructed calorimeter clusters",
+    1600, 1000);
+  cClusters->Divide(3, 2);
+  cClusters->cd(1);
+  hClusterEnergy->Draw("HIST");
+  cClusters->cd(2);
+  hClusterTime->Draw("HIST");
+  cClusters->cd(3);
+  hClusterZ->Draw("HIST");
+  cClusters->cd(4);
+  hClusterXYByDisk[0]->Draw("COLZ");
+  cClusters->cd(5);
+  hClusterXYByDisk[1]->Draw("COLZ");
+  cClusters->SaveAs(clusterPdfName.c_str());
+
+  const string crystalPdfName =
+    caloPlotsDirectory + "/twoElectronCaloAnalysis_" + generatorName + "_CrystalHitEnergy.pdf";
+  TCanvas* cCrystalHits = new TCanvas(
+    "cCrystalHits",
+    "Calorimeter crystal-hit energy",
+    1400, 600);
+  cCrystalHits->Divide(2, 1);
+  cCrystalHits->cd(1);
+  hCrystalHitEnergy->Draw("HIST");
+  cCrystalHits->cd(2);
+  hCrystalEnergyById->Draw("HIST");
+  cCrystalHits->SaveAs(crystalPdfName.c_str());
+
+  cout << "Wrote calorimeter PDF plots to:" << endl;
+  cout << "  " << trackCaloPdfName << endl;
+  cout << "  " << clusterPdfName << endl;
+  cout << "  " << crystalPdfName << endl;
+
   // Draw the calorimeter after the event loop.  Right now CaloHitter only knows
   // the blank crystal geometry, but this location is intentional: later we can
   // use the accumulated event/crystal information from the analysis above to
   // alter crystal colors, labels, or hit markers before saving the diagram.
-  const string blankCaloDiskPdfName = "twoElectronCaloAnalysis_BlankCaloDisks_" + generatorName + ".pdf";
+  const string blankCaloDiskPdfName =
+    "Plots/CaloHitPlots/twoElectronCaloAnalysis_BlankCaloDisks_" + generatorName + ".pdf";
   cout << "Writing blank calorimeter disk PDF: " << blankCaloDiskPdfName << endl;
   calohitter::saveCalorimeterPdf(blankCaloDiskPdfName);
 
@@ -377,4 +595,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
   // Timing is useful when deciding whether to print all selected events or only
   // the first few during development.
   cout << "CPU time: " << timer.CpuTime() << " s, real time: " << timer.RealTime() << " s" << endl;
+
+  TH1::AddDirectory(oldAddDirectoryStatus);
+  gROOT->SetBatch(wasBatchMode);
 }
