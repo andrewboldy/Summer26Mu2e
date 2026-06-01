@@ -111,6 +111,16 @@ struct SelectedHit {
   Color_t markerColor = kRed + 1;
   Style_t markerStyle = 20;
   double markerSize = 1.35;
+  bool drawMarker = true;
+
+  // Optional crystal-cell highlight.  This is separate from the marker so an
+  // analysis can highlight many hit crystals without cluttering the plot with a
+  // marker and text label on every crystal.
+  bool drawCrystalCell = false;
+  Color_t crystalFillColor = kOrange - 3;
+  Style_t crystalFillStyle = 1001;
+  Color_t crystalLineColor = kOrange + 7;
+  Width_t crystalLineWidth = 1;
 
   SelectedHit() = default;
 
@@ -149,6 +159,23 @@ struct SelectedHit {
     hit.markerColor = markerColorValue;
     hit.markerStyle = markerStyleValue;
     hit.markerSize = markerSizeValue;
+    return hit;
+  }
+
+  static SelectedHit highlightCrystal(const int crystalNumberValue,
+                                      const Color_t fillColorValue = kOrange - 3,
+                                      const Style_t fillStyleValue = 1001,
+                                      const Color_t lineColorValue = kOrange + 7,
+                                      const Width_t lineWidthValue = 1,
+                                      const std::string& labelValue = "")
+  {
+    SelectedHit hit = fromCrystal(crystalNumberValue, labelValue);
+    hit.drawMarker = false;
+    hit.drawCrystalCell = true;
+    hit.crystalFillColor = fillColorValue;
+    hit.crystalFillStyle = fillStyleValue;
+    hit.crystalLineColor = lineColorValue;
+    hit.crystalLineWidth = lineWidthValue;
     return hit;
   }
 };
@@ -363,6 +390,23 @@ inline void drawOwnedBox(const double xMin, const double yMin, const double xMax
   box->Draw("l");
 }
 
+// Draw a filled crystal-cell overlay.  This is used for selected hit crystals
+// after the blank grid is drawn, while drawOwnedBox above keeps the base
+// geometry as unfilled line art.
+inline void drawOwnedFilledBox(const double xMin, const double yMin,
+                               const double xMax, const double yMax,
+                               const Color_t lineColor, const Width_t lineWidth,
+                               const Style_t fillStyle, const Color_t fillColor)
+{
+  TBox* box = new TBox(xMin, yMin, xMax, yMax);
+  box->SetLineColor(lineColor);
+  box->SetLineWidth(lineWidth);
+  box->SetFillStyle(fillStyle);
+  box->SetFillColor(fillColor);
+  box->SetBit(TObject::kCanDelete);
+  box->Draw("same");
+}
+
 // Draw a circular boundary.  Both calorimeter radii are shown as unfilled
 // TEllipse objects with equal x/y radii.
 inline void drawOwnedCircle(const double radius, const Color_t color, const Width_t width)
@@ -395,6 +439,20 @@ inline void drawOwnedLatex(const double x, const double y, const std::string& te
                            const double textSize, const int align)
 {
   TLatex* latex = new TLatex(x, y, text.c_str());
+  latex->SetTextAlign(align);
+  latex->SetTextSize(textSize);
+  latex->SetTextFont(42);
+  latex->SetBit(TObject::kCanDelete);
+  latex->Draw("same");
+}
+
+// Draw text in normalized pad/canvas coordinates.  This is used for event-level
+// labels that should remain at the top of the PDF independent of disk x/y range.
+inline void drawOwnedNdcLatex(const double x, const double y, const std::string& text,
+                              const double textSize, const int align)
+{
+  TLatex* latex = new TLatex(x, y, text.c_str());
+  latex->SetNDC(true);
   latex->SetTextAlign(align);
   latex->SetTextSize(textSize);
   latex->SetTextFont(42);
@@ -470,6 +528,37 @@ inline bool selectedHitPosition(const SelectedHit& hit,
   return false;
 }
 
+// Draw filled cells for all selected crystals on one disk.  This happens before
+// the disk boundary and track markers are redrawn, so the highlighted cells stay
+// visible without covering the final outlines or selected-track markers.
+inline void drawSelectedCrystalCellsForDisk(const int diskNumber,
+                                            const std::vector<SelectedHit>& selectedHits,
+                                            const std::vector<CrystalPlacement>& placements)
+{
+  for (const SelectedHit& hit : selectedHits) {
+    if (!hit.drawCrystalCell || selectedHitDiskNumber(hit) != diskNumber) {
+      continue;
+    }
+
+    double x = 0.0;
+    double y = 0.0;
+    if (!selectedHitPosition(hit, placements, x, y)) {
+      std::cerr << "WARNING: could not place selected crystal";
+      if (hit.crystalNumber >= 0) {
+        std::cerr << " with crystal number " << hit.crystalNumber;
+      }
+      std::cerr << " on disk " << diskNumber << std::endl;
+      continue;
+    }
+
+    const double halfSize = 0.5 * kCellSize;
+    drawOwnedFilledBox(x - halfSize, y - halfSize,
+                       x + halfSize, y + halfSize,
+                       hit.crystalLineColor, hit.crystalLineWidth,
+                       hit.crystalFillStyle, hit.crystalFillColor);
+  }
+}
+
 // Draw all SelectedHit overlays that belong to one disk.  The physics selection
 // remains entirely in the caller; this routine only filters by disk and draws
 // the provided markers in the same coordinate frame as the blank geometry.
@@ -493,7 +582,9 @@ inline void drawSelectedHitsForDisk(const int diskNumber,
       continue;
     }
 
-    drawOwnedMarker(x, y, hit);
+    if (hit.drawMarker) {
+      drawOwnedMarker(x, y, hit);
+    }
     if (!hit.label.empty()) {
       drawOwnedLatex(x + 18.0, y + 18.0, hit.label, 0.025, 11);
     }
@@ -632,13 +723,18 @@ inline void drawCalorimeterDisk(const Calorimeter& calorimeter,
                          kGray + 1, 0, kWhite);
   }
 
+  // Fill caller-selected crystal cells before redrawing the boundaries and
+  // markers.  This keeps the hit-crystal highlight visible while preserving the
+  // final disk outlines.
+  detail::drawSelectedCrystalCellsForDisk(calorimeter.number, selectedHits, placements);
+
   // Draw the annulus boundaries on top of the cells so the physical aperture is
   // clear in the saved PDF.
   detail::drawOwnedCircle(detail::kOuterCrystalRadius, kBlack, 2);
   detail::drawOwnedCircle(detail::kInnerCrystalRadius, kBlack, 2);
 
-  // Overlay caller-selected objects after the blank disk is drawn so the
-  // markers and labels sit on top of the crystal grid.
+  // Overlay caller-selected markers and labels after the blank disk is drawn so
+  // the selected-track markers sit on top of the highlighted hit crystals.
   detail::drawSelectedHitsForDisk(calorimeter.number, selectedHits, placements);
 
   // Small label confirming which disk is shown and how many crystals were built.
@@ -659,7 +755,8 @@ inline void drawCalorimeterDisk(const Calorimeter& calorimeter)
 // geometry this makes a two-panel canvas: Front disk on the left, Back disk on the right.
 inline TCanvas* drawCalorimeterDisks(const std::vector<Calorimeter>& calorimeters,
                                      const std::vector<SelectedHit>& selectedHits,
-                                     const std::string& canvasName = "cCaloHitter")
+                                     const std::string& canvasName = "cCaloHitter",
+                                     const std::string& eventLabel = "")
 {
   // Disable ROOT's automatic statistics box.  It is useful for histograms but
   // distracting for a geometry drawing where there is no statistical sample.
@@ -675,6 +772,9 @@ inline TCanvas* drawCalorimeterDisks(const std::vector<Calorimeter>& calorimeter
   }
 
   canvas->cd();
+  if (!eventLabel.empty()) {
+    detail::drawOwnedNdcLatex(0.5, 0.985, eventLabel, 0.028, 22);
+  }
   canvas->Modified();
   canvas->Update();
   return canvas;
@@ -695,7 +795,8 @@ inline TCanvas* saveCalorimeterPdf(const std::string& outputPdf =
                                      "/CaloHitter_CalorimeterDisks.pdf",
                                    const std::vector<SelectedHit>& selectedHits =
                                      std::vector<SelectedHit>(),
-                                   const std::string& canvasName = "cCaloHitter")
+                                   const std::string& canvasName = "cCaloHitter",
+                                   const std::string& eventLabel = "")
 {
   // Batch mode prevents ROOT from opening GUI windows when the macro is run from
   // a terminal or batch job.  Restore the user's previous setting before return.
@@ -703,7 +804,8 @@ inline TCanvas* saveCalorimeterPdf(const std::string& outputPdf =
   gROOT->SetBatch(true);
 
   const std::vector<Calorimeter> calorimeters = buildCalorimeters();
-  TCanvas* canvas = drawCalorimeterDisks(calorimeters, selectedHits, canvasName);
+  TCanvas* canvas = drawCalorimeterDisks(
+    calorimeters, selectedHits, canvasName, eventLabel);
 
   // ROOT will not create missing directories during Print(), so prepare the
   // output directory first and then write the PDF.

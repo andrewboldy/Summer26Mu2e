@@ -151,6 +151,12 @@ void twoElectronCaloAnalysis(const string& generatorName,
   // electrons, so the upper edge is twice the single-electron upper edge.
   const double twoElectronCaloEnergySumMax = 2.0 * caloEnergyMax;
 
+  // Crystal-hit sums can represent all reconstructed hit energy in one cluster
+  // or in an entire selected event.  Give them a wider range than individual
+  // crystal hits because many crystals can contribute to one shower.
+  const double clusterCrystalHitEnergySumMax = twoElectronCaloEnergySumMax;
+  const double eventCrystalHitEnergySumMax = 4.0 * caloEnergyMax;
+
   // The matched-momentum plots intentionally use the same 0-70 visual range as
   // the calorimeter-energy plots.  The value is the track momentum stored in
   // trkcalohit.mom, not a calorimeter-only momentum measurement.
@@ -271,6 +277,19 @@ void twoElectronCaloAnalysis(const string& generatorName,
     "hCrystalEnergyById",
     "Summed crystal-hit energy by crystal ID;crystal ID;#Sigma E_{hit} [MeV]",
     1348, -0.5, 1347.5);
+  TH1F* hClusterCrystalHitEnergySum = new TH1F(
+    "hClusterCrystalHitEnergySum",
+    "Summed crystal-hit energy per reconstructed cluster;#Sigma E_{hit in cluster} [MeV];Clusters",
+    2 * caloEnergyBins, caloEnergyMin, clusterCrystalHitEnergySumMax);
+  TH1F* hSelectedEventCrystalHitEnergySum = new TH1F(
+    "hSelectedEventCrystalHitEnergySum",
+    "Summed crystal-hit energy per selected event;#Sigma E_{hit in selected event} [MeV];Selected events",
+    4 * caloEnergyBins, caloEnergyMin, eventCrystalHitEnergySumMax);
+  TH2F* hClusterEnergyVsCrystalHitEnergySum = new TH2F(
+    "hClusterEnergyVsCrystalHitEnergySum",
+    "Cluster energy vs summed crystal-hit energy;E_{cluster} [MeV];#Sigma E_{hit in cluster} [MeV]",
+    2 * caloEnergyBins, caloEnergyMin, clusterCrystalHitEnergySumMax,
+    2 * caloEnergyBins, caloEnergyMin, clusterCrystalHitEnergySumMax);
 
   // Small local record for the two electrons we are trying to identify.  It
   // keeps the reconstructed track index, its rank-0 MC truth match, and the
@@ -303,6 +322,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
     int run = -1;
     int subrun = -1;
     int event = -1;
+    string eventLabel;
     vector<calohitter::SelectedHit> selectedHits;
   };
 
@@ -420,6 +440,17 @@ void twoElectronCaloAnalysis(const string& generatorName,
       eventNumber = event.evtinfo->event;
     }
 
+    auto eventDisplayLabel = [&](const string& topologyName) {
+      ostringstream label;
+      label << topologyName
+            << " selected two-electron track-calo event"
+            << " | entry=" << i_event
+            << " run=" << run
+            << " subrun=" << subrun
+            << " event=" << eventNumber;
+      return label.str();
+    };
+
     {
       ostringstream line;
       line << "\nEVENT entry=" << i_event
@@ -441,6 +472,12 @@ void twoElectronCaloAnalysis(const string& generatorName,
     double twoElectronCaloMomenta[2] = {-1.0, -1.0};
     bool hasTwoElectronCaloMomentum[2] = {false, false};
     SelectedElectronCaloPoint selectedElectronCaloPoints[2];
+    bool currentEventIsFrontFront = false;
+    bool currentEventIsBackBack = false;
+    bool currentEventIsFrontBack = false;
+    vector<calohitter::SelectedHit> currentEventCrystalHitHighlights;
+    vector<int> currentEventHighlightedCrystalIds;
+    double selectedEventCrystalHitEnergySum = 0.0;
 
     for (size_t i_electron = 0; i_electron < rank0ElectronTracks.size(); ++i_electron)
     {
@@ -599,38 +636,6 @@ void twoElectronCaloAnalysis(const string& generatorName,
       const int disk0 = selectedElectronCaloPoints[0].disk;
       const int disk1 = selectedElectronCaloPoints[1].disk;
 
-      // Convert this event's two selected electron impact points into the
-      // generic CaloHitter overlay records.  CaloHitter only receives disk/x/y
-      // marker data; all physics categorization stays in this analysis macro.
-      auto makeSelectedHit = [](const SelectedElectronCaloPoint& point,
-                                const int electronIndex) {
-        ostringstream label;
-        label << "e" << electronIndex
-              << " trk " << point.trackIndex
-              << " E=" << fixed << setprecision(1) << point.energy;
-
-        const Color_t markerColor = electronIndex == 0 ? kRed + 1 : kBlue + 1;
-        const Style_t markerStyle = electronIndex == 0 ? 20 : 21;
-        return calohitter::SelectedHit::fromXY(
-          point.disk, point.x, point.y, label.str(), markerColor, markerStyle, 1.45);
-      };
-
-      auto saveFirstTopologyDisplay = [&](FirstDiskTopologyDisplay& display) {
-        if (display.found)
-        {
-          return;
-        }
-
-        display.found = true;
-        display.entry = i_event;
-        display.run = run;
-        display.subrun = subrun;
-        display.event = eventNumber;
-        display.selectedHits.clear();
-        display.selectedHits.push_back(makeSelectedHit(selectedElectronCaloPoints[0], 0));
-        display.selectedHits.push_back(makeSelectedHit(selectedElectronCaloPoints[1], 1));
-      };
-
       string diskTopologyCategory;
       if (disk0 == disk1)
       {
@@ -640,12 +645,12 @@ void twoElectronCaloAnalysis(const string& generatorName,
         if (disk0 == 0)
         {
           ++selectedEventsWithBothElectronsOnFrontDisk;
-          saveFirstTopologyDisplay(firstFrontFrontDisplay);
+          currentEventIsFrontFront = true;
         }
         else if (disk0 == 1)
         {
           ++selectedEventsWithBothElectronsOnBackDisk;
-          saveFirstTopologyDisplay(firstBackBackDisplay);
+          currentEventIsBackBack = true;
         }
       }
       else
@@ -658,7 +663,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
         if ((disk0 == 0 && disk1 == 1) || (disk0 == 1 && disk1 == 0))
         {
           ++selectedEventsWithFrontBackElectronCaloDisks;
-          saveFirstTopologyDisplay(firstFrontBackDisplay);
+          currentEventIsFrontBack = true;
         }
       }
 
@@ -763,12 +768,32 @@ void twoElectronCaloAnalysis(const string& generatorName,
           const auto& hit = event.calohits->at(hitIndex);
           ++validClusterCrystalHitCount;
           validClusterCrystalHitEnergySum += hit.eDep_;
+          selectedEventCrystalHitEnergySum += hit.eDep_;
           hCrystalHitEnergy->Fill(hit.eDep_);
           if (hit.crystalId_ >= 0 && hit.crystalId_ < 1348)
           {
             // Fill by weight, not by count.  The bin content is summed deposited
             // energy for that crystal ID across all selected events.
             hCrystalEnergyById->Fill(hit.crystalId_, hit.eDep_);
+
+            // Save one highlight per hit crystal for this selected event.  The
+            // first-event displays later reuse this vector so the CaloHitter PDF
+            // shows every reconstructed crystal assigned to the event's clusters.
+            bool alreadyHighlighted = false;
+            for (const int highlightedCrystalId : currentEventHighlightedCrystalIds)
+            {
+              if (highlightedCrystalId == hit.crystalId_)
+              {
+                alreadyHighlighted = true;
+                break;
+              }
+            }
+            if (!alreadyHighlighted)
+            {
+              currentEventHighlightedCrystalIds.push_back(hit.crystalId_);
+              currentEventCrystalHitHighlights.push_back(
+                calohitter::SelectedHit::highlightCrystal(hit.crystalId_));
+            }
           }
 
           if (printThisEvent && printCrystalHitDetails)
@@ -820,7 +845,64 @@ void twoElectronCaloAnalysis(const string& generatorName,
                << " detail_lines_suppressed=" << validClusterCrystalHitCount;
           printSelectedLine(line.str());
         }
+
+        hClusterCrystalHitEnergySum->Fill(validClusterCrystalHitEnergySum);
+        hClusterEnergyVsCrystalHitEnergySum->Fill(
+          cluster.energyDep_, validClusterCrystalHitEnergySum);
       }
+    }
+
+    hSelectedEventCrystalHitEnergySum->Fill(selectedEventCrystalHitEnergySum);
+
+    // After the cluster loop, the event-level crystal highlight vector is
+    // complete.  Save the first example of each requested disk topology with
+    // both the selected track-calo markers and all reconstructed hit crystals.
+    auto makeTrackSelectedHit = [](const SelectedElectronCaloPoint& point,
+                                   const int electronIndex) {
+      ostringstream label;
+      label << "e" << electronIndex
+            << " trk " << point.trackIndex
+            << " E=" << fixed << setprecision(1) << point.energy;
+
+      const Color_t markerColor = electronIndex == 0 ? kRed + 1 : kBlue + 1;
+      const Style_t markerStyle = electronIndex == 0 ? 20 : 21;
+      return calohitter::SelectedHit::fromXY(
+        point.disk, point.x, point.y, label.str(), markerColor, markerStyle, 1.45);
+    };
+
+    auto saveFirstTopologyDisplay = [&](FirstDiskTopologyDisplay& display,
+                                        const string& topologyName) {
+      if (display.found)
+      {
+        return;
+      }
+
+      display.found = true;
+      display.entry = i_event;
+      display.run = run;
+      display.subrun = subrun;
+      display.event = eventNumber;
+      display.eventLabel = eventDisplayLabel(topologyName);
+      display.selectedHits.clear();
+      display.selectedHits.insert(
+        display.selectedHits.end(),
+        currentEventCrystalHitHighlights.begin(),
+        currentEventCrystalHitHighlights.end());
+      display.selectedHits.push_back(makeTrackSelectedHit(selectedElectronCaloPoints[0], 0));
+      display.selectedHits.push_back(makeTrackSelectedHit(selectedElectronCaloPoints[1], 1));
+    };
+
+    if (currentEventIsFrontFront)
+    {
+      saveFirstTopologyDisplay(firstFrontFrontDisplay, "Front/Front");
+    }
+    if (currentEventIsBackBack)
+    {
+      saveFirstTopologyDisplay(firstBackBackDisplay, "Back/Back");
+    }
+    if (currentEventIsFrontBack)
+    {
+      saveFirstTopologyDisplay(firstFrontBackDisplay, "Front/Back");
     }
   }
 
@@ -909,7 +991,9 @@ void twoElectronCaloAnalysis(const string& generatorName,
              << "# histogram_two_electron_track_calo_entries " << hTwoElectronTrackCaloEnergyAll->GetEntries() << '\n'
              << "# histogram_two_electron_track_calo_momentum_entries " << hTwoElectronTrackCaloMomentumAll->GetEntries() << '\n'
              << "# histogram_cluster_entries " << hClusterEnergy->GetEntries() << '\n'
-             << "# histogram_crystal_hit_entries " << hCrystalHitEnergy->GetEntries() << '\n';
+             << "# histogram_crystal_hit_entries " << hCrystalHitEnergy->GetEntries() << '\n'
+             << "# histogram_cluster_crystal_hit_energy_sum_entries " << hClusterCrystalHitEnergySum->GetEntries() << '\n'
+             << "# histogram_selected_event_crystal_hit_energy_sum_entries " << hSelectedEventCrystalHitEnergySum->GetEntries() << '\n';
 
   outputFile << "# selected_events_pct_of_ntuple_entries "
              << percentOf(selectedEventCount, numEvents) << '\n'
@@ -1041,6 +1125,9 @@ void twoElectronCaloAnalysis(const string& generatorName,
     hClusterTime->Write();
     hCrystalHitEnergy->Write();
     hCrystalEnergyById->Write();
+    hClusterCrystalHitEnergySum->Write();
+    hSelectedEventCrystalHitEnergySum->Write();
+    hClusterEnergyVsCrystalHitEnergySum->Write();
     histogramFile.Close();
     cout << "Wrote calorimeter histogram ROOT file to " << histogramRootFileName << endl;
   }
@@ -1172,6 +1259,24 @@ void twoElectronCaloAnalysis(const string& generatorName,
   hCrystalEnergyById->Draw("HIST");
   cCrystalHits->SaveAs(crystalPdfName.c_str());
 
+  // PDF group 8: summed crystal-hit energies.  These plots answer the question
+  // "how much energy is carried by all reconstructed hit crystals together?"
+  // rather than treating each crystal as one independent entry.
+  const string crystalSumPdfName =
+    caloPlotsDirectory + "/twoElectronCaloAnalysis_" + generatorName + "_CrystalHitEnergySums.pdf";
+  TCanvas* cCrystalHitSums = new TCanvas(
+    "cCrystalHitSums",
+    "Summed calorimeter crystal-hit energy",
+    1400, 1000);
+  cCrystalHitSums->Divide(2, 2);
+  cCrystalHitSums->cd(1);
+  hClusterCrystalHitEnergySum->Draw("HIST");
+  cCrystalHitSums->cd(2);
+  hSelectedEventCrystalHitEnergySum->Draw("HIST");
+  cCrystalHitSums->cd(3);
+  hClusterEnergyVsCrystalHitEnergySum->Draw("COLZ");
+  cCrystalHitSums->SaveAs(crystalSumPdfName.c_str());
+
   cout << "Wrote calorimeter PDF plots to:" << endl;
   cout << "  " << trackCaloPdfName << endl;
   cout << "  " << twoElectronTrackCaloPdfName << endl;
@@ -1180,6 +1285,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
   cout << "  " << twoElectronTrackCaloMomentumLogPdfName << endl;
   cout << "  " << clusterPdfName << endl;
   cout << "  " << crystalPdfName << endl;
+  cout << "  " << crystalSumPdfName << endl;
 
   // Draw the calorimeter after the event loop.  Right now CaloHitter only knows
   // the blank crystal geometry, but this location is intentional: later we can
@@ -1212,8 +1318,10 @@ void twoElectronCaloAnalysis(const string& generatorName,
          << " from entry=" << display.entry
          << " run=" << display.run
          << " subrun=" << display.subrun
-         << " event=" << display.event << endl;
-    calohitter::saveCalorimeterPdf(outputPdf, display.selectedHits, canvasName);
+         << " event=" << display.event
+         << " overlays=" << display.selectedHits.size() << endl;
+    calohitter::saveCalorimeterPdf(
+      outputPdf, display.selectedHits, canvasName, display.eventLabel);
   };
 
   const string firstFrontFrontCaloDiskPdfName =
