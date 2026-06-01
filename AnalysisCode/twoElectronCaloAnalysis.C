@@ -69,7 +69,12 @@ void twoElectronCaloAnalysis(const string& generatorName,
                              // percentages.  The current production sample was
                              // thrown with 100,000 events, but this can be
                              // overridden from the ROOT call if needed.
-                             const long long totalThrownEvents = 100000)
+                             const long long totalThrownEvents = 100000,
+                             // Per-crystal text lines are very large.  Keep
+                             // them off by default so the text output stays
+                             // below common upload limits while the histograms
+                             // still receive every crystal hit.
+                             const bool printCrystalHitDetails = false)
 {
   // First do a simple existence/open check.  RooUtil will handle the detailed
   // ROOT parsing later, but this gives a clear error for a bad path or filelist.
@@ -113,6 +118,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
              << "# Selected event definition: exactly two valid rank-0 trkmcsim electrons among reconstructed e-minus tracks.\n"
              << "# Cluster coordinates are caloclusters.cog_ in the calorimeter disk front-face frame.\n"
              << "# Crystal-hit lines use parent cluster COG xyz because EventNtuple calohits do not store per-crystal xyz.\n"
+             << "# Per-crystal CRYSTAL_HIT detail lines are disabled unless printCrystalHitDetails is true.\n"
+             << "# Crystal-hit histograms are still filled even when text detail lines are disabled.\n"
              << "# Calorimeter momentum is represented by the matched reconstructed track momentum from trkcalohit.mom.\n"
              << "# Disk labels: raw disk 0 = Front, raw disk 1 = Back.\n"
              << "# Units: energy in MeV, position in mm.\n";
@@ -315,6 +322,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
   long long printedTrackCaloCount = 0;
   long long printedClusterCount = 0;
   long long printedCrystalHitCount = 0;
+  long long printedCrystalHitSummaryCount = 0;
+  long long suppressedCrystalHitDetailCount = 0;
   long long selectedEventsWithoutCaloClusters = 0;
   long long selectedRank0TracksWithoutCalo = 0;
   long long twoElectronTrackCaloEnergyFills = 0;
@@ -728,6 +737,14 @@ void twoElectronCaloAnalysis(const string& generatorName,
         // These entries carry crystalId_ and eDep_, which are the key pieces for
         // connecting deposited energy to individual calorimeter crystals.
         //
+        // The crystal-hit histograms are always filled.  The per-hit text dump
+        // is optional because those lines dominate the output file size.  When
+        // detailed lines are disabled, print one compact summary line per
+        // cluster instead.
+        int validClusterCrystalHitCount = 0;
+        int invalidClusterCrystalHitCount = 0;
+        double validClusterCrystalHitEnergySum = 0.0;
+
         // Guard every index before dereferencing.  This keeps the macro useful
         // even if a file has an unusual cluster-hit reference: the bad index is
         // printed and the rest of the event can still be processed.
@@ -735,6 +752,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
         {
           if (hitIndex < 0 || static_cast<size_t>(hitIndex) >= event.calohits->size())
           {
+            ++invalidClusterCrystalHitCount;
             ostringstream line;
             line << "    CRYSTAL_HIT invalid hit index " << hitIndex
                  << " for cluster_index=" << i_cluster;
@@ -743,6 +761,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
           }
 
           const auto& hit = event.calohits->at(hitIndex);
+          ++validClusterCrystalHitCount;
+          validClusterCrystalHitEnergySum += hit.eDep_;
           hCrystalHitEnergy->Fill(hit.eDep_);
           if (hit.crystalId_ >= 0 && hit.crystalId_ < 1348)
           {
@@ -751,28 +771,53 @@ void twoElectronCaloAnalysis(const string& generatorName,
             hCrystalEnergyById->Fill(hit.crystalId_, hit.eDep_);
           }
 
-          if (printThisEvent)
+          if (printThisEvent && printCrystalHitDetails)
           {
             ++printedCrystalHitCount;
           }
+          else if (printThisEvent)
+          {
+            ++suppressedCrystalHitDetailCount;
+          }
 
-          // EventNtuple calohits do not include the crystal center xyz directly.
-          // For now, the printed xyz is the parent cluster COG.  CaloHitter will
-          // let us convert crystal_id to a drawn crystal location in the next pass.
+          if (printCrystalHitDetails)
+          {
+            // EventNtuple calohits do not include the crystal center xyz directly.
+            // For now, the printed xyz is the parent cluster COG.  CaloHitter will
+            // let us convert crystal_id to a drawn crystal location in the next pass.
+            ostringstream line;
+            line << "    CRYSTAL_HIT"
+                 << " hit_index=" << hitIndex
+                 << " crystal_id=" << hit.crystalId_
+                 << " parent_cluster=" << hit.clusterIdx_
+                 << " disk=" << cluster.diskID_
+                 << " disk_label=" << calohitter::diskShortLabel(cluster.diskID_)
+                 << " energy=" << fixed << setprecision(6) << hit.eDep_
+                 << " energyErr=" << hit.eDepErr_
+                 << " time=" << hit.time_
+                 << " nSiPMs=" << hit.nSiPMs_
+                 << " parent_cluster_cog_xyz=(" << cluster.cog_.x()
+                 << ", " << cluster.cog_.y()
+                 << ", " << cluster.cog_.z() << ")";
+            printSelectedLine(line.str());
+          }
+        }
+
+        if (!printCrystalHitDetails)
+        {
+          if (printThisEvent)
+          {
+            ++printedCrystalHitSummaryCount;
+          }
+
           ostringstream line;
-          line << "    CRYSTAL_HIT"
-               << " hit_index=" << hitIndex
-               << " crystal_id=" << hit.crystalId_
-               << " parent_cluster=" << hit.clusterIdx_
-               << " disk=" << cluster.diskID_
-               << " disk_label=" << calohitter::diskShortLabel(cluster.diskID_)
-               << " energy=" << fixed << setprecision(6) << hit.eDep_
-               << " energyErr=" << hit.eDepErr_
-               << " time=" << hit.time_
-               << " nSiPMs=" << hit.nSiPMs_
-               << " parent_cluster_cog_xyz=(" << cluster.cog_.x()
-               << ", " << cluster.cog_.y()
-               << ", " << cluster.cog_.z() << ")";
+          line << "    CRYSTAL_HIT_SUMMARY"
+               << " cluster_index=" << i_cluster
+               << " valid_hits=" << validClusterCrystalHitCount
+               << " invalid_hits=" << invalidClusterCrystalHitCount
+               << " summed_energy=" << fixed << setprecision(6)
+               << validClusterCrystalHitEnergySum
+               << " detail_lines_suppressed=" << validClusterCrystalHitCount;
           printSelectedLine(line.str());
         }
       }
@@ -831,6 +876,9 @@ void twoElectronCaloAnalysis(const string& generatorName,
              << "# selected_rank0_tracks_without_track_calo " << selectedRank0TracksWithoutCalo << '\n'
              << "# printed_clusters " << printedClusterCount << '\n'
              << "# printed_crystal_hits " << printedCrystalHitCount << '\n'
+             << "# printed_crystal_hit_summaries " << printedCrystalHitSummaryCount << '\n'
+             << "# suppressed_crystal_hit_detail_lines " << suppressedCrystalHitDetailCount << '\n'
+             << "# print_crystal_hit_details " << (printCrystalHitDetails ? 1 : 0) << '\n'
              << "# selected_events_without_calo_clusters " << selectedEventsWithoutCaloClusters << '\n'
              << "# two_electron_track_calo_energy_fills " << twoElectronTrackCaloEnergyFills << '\n'
              << "# selected_events_with_both_electron_calo_energies " << selectedEventsWithBothElectronCaloEnergies << '\n'
@@ -890,7 +938,10 @@ void twoElectronCaloAnalysis(const string& generatorName,
   cout << "  track-associated calo entries printed: " << printedTrackCaloCount << endl;
   cout << "  rank-0 tracks without track calo association: " << selectedRank0TracksWithoutCalo << endl;
   cout << "  event-level calo clusters printed: " << printedClusterCount << endl;
-  cout << "  crystal-hit energy lines printed: " << printedCrystalHitCount << endl;
+  cout << "  detailed crystal-hit energy lines printed: " << printedCrystalHitCount << endl;
+  cout << "  crystal-hit summary lines printed: " << printedCrystalHitSummaryCount << endl;
+  cout << "  detailed crystal-hit lines suppressed: " << suppressedCrystalHitDetailCount << endl;
+  cout << "  print detailed crystal-hit lines: " << (printCrystalHitDetails ? "yes" : "no") << endl;
   cout << "  selected events without calo clusters: " << selectedEventsWithoutCaloClusters << endl;
   cout << "  two-electron track-calo energy histogram fills: " << twoElectronTrackCaloEnergyFills << endl;
   cout << "  selected events with both electron calo energies: " << selectedEventsWithBothElectronCaloEnergies << endl;
