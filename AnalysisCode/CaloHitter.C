@@ -26,6 +26,14 @@ TCanvas* CaloHitter(const std::string& outputPdf = "Plots/CaloHitPlots/CaloHitte
 {
   // Build the blank two-disk calorimeter geometry, draw it, save it as outputPdf,
   // and print the disk/total crystal counts to the terminal.
+  //
+  // This wrapper intentionally stays tiny.  The reusable structures and drawing
+  // functions live in CaloHitter.hh so analysis macros can include the same
+  // Calorimeter and CaloCrystal definitions directly.
+  //
+  // Later, if we want a standalone macro that fills crystals with hit energies,
+  // this is the place to add a small input-reading layer before calling the
+  // lower-level drawing functions.
   return calohitter::saveCalorimeterPdf(outputPdf);
 }
 

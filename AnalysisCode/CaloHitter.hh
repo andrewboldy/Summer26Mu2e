@@ -38,6 +38,7 @@
 #include <TEllipse.h>
 #include <TLatex.h>
 #include <TLine.h>
+#include <TMarker.h>
 #include <TObject.h>
 #include <TPad.h>
 #include <TROOT.h>
@@ -46,10 +47,17 @@
 
 namespace calohitter {
 
+// Public crystal-count constant used by both analysis-facing helpers and the
+// internal drawing code.  Keeping this outside detail lets SelectedHit infer a
+// disk number from a global crystal ID without depending on private internals.
+static const int kCaloHitterCrystalsPerDisk = 674;
+
 // One calorimeter crystal.  This deliberately starts small: the crystal number
 // is enough to map EventNtuple calohits onto a drawn location.  Future fields
 // can include deposited energy, hit time, MC truth labels, or display colors.
 struct CaloCrystal {
+  // Global EventNtuple-style crystal number.  For the current two-disk geometry
+  // this is 0-673 on the front disk and 674-1347 on the back disk.
   int crystalNumber = -1;
 
   CaloCrystal() = default;
@@ -62,11 +70,87 @@ using CaloCrystals = std::vector<CaloCrystal>;
 // a disk because Mu2e's calorimeter is a pair of disks, each with its own crystal
 // numbering offset.
 struct Calorimeter {
+  // Raw Mu2e/EventNtuple disk number.  User-facing plots translate this to
+  // "Front" and "Back", but storing the raw ID keeps the object compatible
+  // with trkcalohit.did and calocluster.diskID_.
   int number = -1;          // disk number: 0 or 1
+
+  // Collection of crystals assigned to this disk.  The crystal objects are
+  // intentionally lightweight right now; future passes can add energy, time,
+  // display color, MC truth labels, or selected-track associations here.
   CaloCrystals crystals;    // crystals belonging to this disk
 
   Calorimeter() = default;
   explicit Calorimeter(const int diskNumber) : number(diskNumber) {}
+};
+
+// Optional overlay marker supplied by analysis code.
+//
+// CaloHitter deliberately does not decide which physics objects are important.
+// Analysis macros should build SelectedHit records for the objects they want to
+// display, then pass the vector to saveCalorimeterPdf().  The marker can be
+// placed either by disk-local x/y or, for future crystal-level overlays, by a
+// global crystal number.
+struct SelectedHit {
+  // Raw disk number: 0 = Front, 1 = Back.  If a crystal number is supplied and
+  // diskNumber is left negative, the disk can be inferred from the crystal ID.
+  int diskNumber = -1;
+
+  // Optional global crystal number.  Set useCrystalCenter=true to draw the
+  // marker at this crystal's ideal center instead of using x/y directly.
+  int crystalNumber = -1;
+  bool useCrystalCenter = false;
+
+  // Disk-local marker position in millimeters.  These coordinates are used when
+  // useCrystalCenter is false.
+  double x = 0.0;
+  double y = 0.0;
+
+  // Optional display metadata controlled by the caller.
+  std::string label;
+  Color_t markerColor = kRed + 1;
+  Style_t markerStyle = 20;
+  double markerSize = 1.35;
+
+  SelectedHit() = default;
+
+  static SelectedHit fromXY(const int diskNumberValue,
+                            const double xValue,
+                            const double yValue,
+                            const std::string& labelValue = "",
+                            const Color_t markerColorValue = kRed + 1,
+                            const Style_t markerStyleValue = 20,
+                            const double markerSizeValue = 1.35)
+  {
+    SelectedHit hit;
+    hit.diskNumber = diskNumberValue;
+    hit.x = xValue;
+    hit.y = yValue;
+    hit.label = labelValue;
+    hit.markerColor = markerColorValue;
+    hit.markerStyle = markerStyleValue;
+    hit.markerSize = markerSizeValue;
+    return hit;
+  }
+
+  static SelectedHit fromCrystal(const int crystalNumberValue,
+                                 const std::string& labelValue = "",
+                                 const Color_t markerColorValue = kRed + 1,
+                                 const Style_t markerStyleValue = 20,
+                                 const double markerSizeValue = 1.35)
+  {
+    SelectedHit hit;
+    hit.crystalNumber = crystalNumberValue;
+    hit.diskNumber = crystalNumberValue >= 0
+                       ? crystalNumberValue / kCaloHitterCrystalsPerDisk
+                       : -1;
+    hit.useCrystalCenter = true;
+    hit.label = labelValue;
+    hit.markerColor = markerColorValue;
+    hit.markerStyle = markerStyleValue;
+    hit.markerSize = markerSizeValue;
+    return hit;
+  }
 };
 
 // Human-facing disk labels.  Keep the raw Mu2e disk numbers internally because
@@ -118,7 +202,7 @@ struct ShiftIndex {
 // Geometry constants from the CsI calorimeter geometry currently used in the
 // Offline checkout.  Units are millimeters where applicable.
 static const int kNumberOfDisks = 2;
-static const int kCrystalsPerDisk = 674;
+static const int kCrystalsPerDisk = kCaloHitterCrystalsPerDisk;
 static const double kInnerCrystalRadius = 374.0;  // mm
 static const double kOuterCrystalRadius = 660.0;  // mm
 static const double kCrystalXYLength = 34.0;      // mm
@@ -131,6 +215,9 @@ static const char* kDefaultPlotDirectory = "Plots/CaloHitPlots";
 // These mirror SquareShiftMapper.cc in Offline/CalorimeterGeom.
 inline std::vector<ShiftIndex> shiftedSquareSteps()
 {
+  // The six step directions walk around one complete ring of the shifted-square
+  // lattice.  Starting from the bottom of a ring and applying these directions
+  // reproduces the ordering used by the Offline square-shift mapper.
   std::vector<ShiftIndex> steps;
   steps.push_back(ShiftIndex(1, 1));
   steps.push_back(ShiftIndex(0, 1));
@@ -152,6 +239,9 @@ inline int nCrystalMax(const int maxRing)
 // starts at the center and then walks ring-by-ring around the disk.
 inline ShiftIndex lkFromIndex(const int thisIndex)
 {
+  // Mapper index 0 is the central lattice cell.  The Mu2e calorimeter has a
+  // hole there, so this cell will be rejected later by the annulus check, but
+  // keeping the mapping complete makes the helper match the Offline convention.
   if (thisIndex < 1) {
     return ShiftIndex(0, 0);
   }
@@ -205,6 +295,9 @@ inline int rowFromIndex(const int mapIndex)
 // closest and farthest distance from the disk center and reject edge crossings.
 inline bool isInsideDisk(const double x, const double y, const double widthX, const double widthY)
 {
+  // Check all four edges of the square cell.  A crystal is accepted only if its
+  // full square footprint is outside the inner hole and inside the outer radius.
+  // This avoids drawing partial crystals that would cross either boundary.
   const double apexX[5] = {-0.5, 0.5, 0.5, -0.5, -0.5};
   const double apexY[5] = {-0.5, -0.5, 0.5, 0.5, -0.5};
 
@@ -259,6 +352,8 @@ inline bool isManuallyRemovedCrystal(const double x, const double y)
 inline void drawOwnedBox(const double xMin, const double yMin, const double xMax, const double yMax,
                          const Color_t lineColor, const Style_t fillStyle, const Color_t fillColor)
 {
+  // ROOT pads own drawn primitives only when requested explicitly.  kCanDelete
+  // lets the pad clean this TBox up when the canvas is destroyed or cleared.
   TBox* box = new TBox(xMin, yMin, xMax, yMax);
   box->SetLineColor(lineColor);
   box->SetLineWidth(1);
@@ -272,6 +367,8 @@ inline void drawOwnedBox(const double xMin, const double yMin, const double xMax
 // TEllipse objects with equal x/y radii.
 inline void drawOwnedCircle(const double radius, const Color_t color, const Width_t width)
 {
+  // TEllipse is used as a circle by giving equal x and y radii.  The fill is
+  // disabled so the crystal grid remains visible underneath the boundaries.
   TEllipse* circle = new TEllipse(0.0, 0.0, radius, radius);
   circle->SetFillStyle(0);
   circle->SetLineColor(color);
@@ -305,10 +402,24 @@ inline void drawOwnedLatex(const double x, const double y, const std::string& te
   latex->Draw("same");
 }
 
+// Draw a caller-supplied selected hit marker.  The marker is kept independent
+// from the crystal boxes so analyses can overlay tracks, clusters, crystal
+// centers, or any other selected object without changing the geometry code.
+inline void drawOwnedMarker(const double x, const double y, const SelectedHit& hit)
+{
+  TMarker* marker = new TMarker(x, y, hit.markerStyle);
+  marker->SetMarkerColor(hit.markerColor);
+  marker->SetMarkerSize(hit.markerSize);
+  marker->SetBit(TObject::kCanDelete);
+  marker->Draw("same");
+}
+
 // ROOT's canvas printing does not create missing directories.  Before writing a
 // PDF, extract the parent directory from the output path and create it.
 inline void ensureOutputDirectory(const std::string& outputPath)
 {
+  // If the caller passes just "file.pdf", there is no directory component to
+  // create.  Otherwise create the parent directory tree before ROOT prints.
   const std::string::size_type slashPosition = outputPath.find_last_of("/\\");
   if (slashPosition == std::string::npos) {
     return;
@@ -320,6 +431,75 @@ inline void ensureOutputDirectory(const std::string& outputPath)
   }
 }
 
+// Resolve which disk should receive a SelectedHit.  For crystal-center overlays,
+// the disk can be inferred from the global crystal number if the caller did not
+// set diskNumber explicitly.
+inline int selectedHitDiskNumber(const SelectedHit& hit)
+{
+  if (hit.diskNumber >= 0) {
+    return hit.diskNumber;
+  }
+  if (hit.crystalNumber >= 0) {
+    return hit.crystalNumber / kCrystalsPerDisk;
+  }
+  return -1;
+}
+
+// Convert a SelectedHit into a drawable x/y position for this disk.  Most track
+// overlays will provide x/y directly.  Crystal overlays can instead request the
+// ideal crystal center using the global crystal number.
+inline bool selectedHitPosition(const SelectedHit& hit,
+                                const std::vector<CrystalPlacement>& placements,
+                                double& x,
+                                double& y)
+{
+  if (!hit.useCrystalCenter) {
+    x = hit.x;
+    y = hit.y;
+    return true;
+  }
+
+  for (const CrystalPlacement& placement : placements) {
+    if (placement.crystalNumber == hit.crystalNumber) {
+      x = placement.x;
+      y = placement.y;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Draw all SelectedHit overlays that belong to one disk.  The physics selection
+// remains entirely in the caller; this routine only filters by disk and draws
+// the provided markers in the same coordinate frame as the blank geometry.
+inline void drawSelectedHitsForDisk(const int diskNumber,
+                                    const std::vector<SelectedHit>& selectedHits,
+                                    const std::vector<CrystalPlacement>& placements)
+{
+  for (const SelectedHit& hit : selectedHits) {
+    if (selectedHitDiskNumber(hit) != diskNumber) {
+      continue;
+    }
+
+    double x = 0.0;
+    double y = 0.0;
+    if (!selectedHitPosition(hit, placements, x, y)) {
+      std::cerr << "WARNING: could not place selected hit";
+      if (hit.crystalNumber >= 0) {
+        std::cerr << " with crystal number " << hit.crystalNumber;
+      }
+      std::cerr << " on disk " << diskNumber << std::endl;
+      continue;
+    }
+
+    drawOwnedMarker(x, y, hit);
+    if (!hit.label.empty()) {
+      drawOwnedLatex(x + 18.0, y + 18.0, hit.label, 0.025, 11);
+    }
+  }
+}
+
 }  // namespace detail
 
 // Build the full list of drawable crystal placements for one disk.  This is the
@@ -327,6 +507,10 @@ inline void ensureOutputDirectory(const std::string& outputPath)
 // annulus, remove the four hand-removed cells, then assign local/global numbers.
 inline std::vector<CrystalPlacement> crystalPlacementsForDisk(const int diskNumber)
 {
+  // This vector is the detailed geometry representation.  It has more
+  // information than Calorimeter::crystals because drawing needs x/y locations
+  // and local numbering, while the public analysis object currently stores only
+  // crystal number.
   std::vector<CrystalPlacement> placements;
   placements.reserve(detail::kCrystalsPerDisk);
 
@@ -381,6 +565,9 @@ inline std::vector<CrystalPlacement> crystalPlacementsForDisk(const int diskNumb
 // crystal objects requested for the analysis interface.
 inline Calorimeter buildCalorimeter(const int diskNumber)
 {
+  // Convert detailed placements into the compact analysis-facing object.  This
+  // keeps the public Calorimeter/CaloCrystal structures simple while allowing
+  // the drawing code to keep using full geometry details internally.
   Calorimeter calorimeter(diskNumber);
   const std::vector<CrystalPlacement> placements = crystalPlacementsForDisk(diskNumber);
   calorimeter.crystals.reserve(placements.size());
@@ -395,6 +582,8 @@ inline Calorimeter buildCalorimeter(const int diskNumber)
 // Build both Mu2e calorimeter disks.
 inline std::vector<Calorimeter> buildCalorimeters()
 {
+  // Build disks in raw-ID order.  The drawing labels convert these to Front and
+  // Back, but the vector order remains disk 0 followed by disk 1.
   std::vector<Calorimeter> calorimeters;
   calorimeters.reserve(detail::kNumberOfDisks);
 
@@ -407,7 +596,10 @@ inline std::vector<Calorimeter> buildCalorimeters()
 
 // Draw one calorimeter disk into the current ROOT pad.  The pad must already
 // exist; drawCalorimeterDisks creates and divides the canvas before calling this.
-inline void drawCalorimeterDisk(const Calorimeter& calorimeter)
+// selectedHits is an optional caller-provided overlay; the helper only draws
+// records assigned to this disk.
+inline void drawCalorimeterDisk(const Calorimeter& calorimeter,
+                                const std::vector<SelectedHit>& selectedHits)
 {
   // Basic pad styling.  The margins leave room for axis titles.
   gPad->SetTicks(1, 1);
@@ -418,6 +610,9 @@ inline void drawCalorimeterDisk(const Calorimeter& calorimeter)
 
   const std::string title = "Calorimeter " + diskDisplayLabel(calorimeter.number) +
                             ";disk-local x [mm];disk-local y [mm]";
+  // DrawFrame creates the axes and establishes the coordinate system for the
+  // rest of the disk.  All subsequent boxes, circles, and labels are drawn in
+  // this same disk-local millimeter frame.
   gPad->DrawFrame(-detail::kDrawRange, -detail::kDrawRange,
                   detail::kDrawRange, detail::kDrawRange, title.c_str());
 
@@ -430,6 +625,8 @@ inline void drawCalorimeterDisk(const Calorimeter& calorimeter)
   const std::vector<CrystalPlacement> placements = crystalPlacementsForDisk(calorimeter.number);
   for (const CrystalPlacement& placement : placements) {
     const double halfSize = 0.5 * detail::kCellSize;
+    // Blank white fill for now.  Later, this is the natural place to translate
+    // a crystal's stored energy or hit state into a color before drawing.
     detail::drawOwnedBox(placement.x - halfSize, placement.y - halfSize,
                          placement.x + halfSize, placement.y + halfSize,
                          kGray + 1, 0, kWhite);
@@ -440,6 +637,10 @@ inline void drawCalorimeterDisk(const Calorimeter& calorimeter)
   detail::drawOwnedCircle(detail::kOuterCrystalRadius, kBlack, 2);
   detail::drawOwnedCircle(detail::kInnerCrystalRadius, kBlack, 2);
 
+  // Overlay caller-selected objects after the blank disk is drawn so the
+  // markers and labels sit on top of the crystal grid.
+  detail::drawSelectedHitsForDisk(calorimeter.number, selectedHits, placements);
+
   // Small label confirming which disk is shown and how many crystals were built.
   detail::drawOwnedLatex(-690.0, 665.0,
                          diskDisplayLabel(calorimeter.number) +
@@ -447,11 +648,21 @@ inline void drawCalorimeterDisk(const Calorimeter& calorimeter)
                          0.032, 11);
 }
 
+// Backward-compatible blank-disk draw entry point.
+inline void drawCalorimeterDisk(const Calorimeter& calorimeter)
+{
+  const std::vector<SelectedHit> selectedHits;
+  drawCalorimeterDisk(calorimeter, selectedHits);
+}
+
 // Draw all supplied Calorimeter objects on one canvas.  For the current Mu2e
 // geometry this makes a two-panel canvas: Front disk on the left, Back disk on the right.
 inline TCanvas* drawCalorimeterDisks(const std::vector<Calorimeter>& calorimeters,
+                                     const std::vector<SelectedHit>& selectedHits,
                                      const std::string& canvasName = "cCaloHitter")
 {
+  // Disable ROOT's automatic statistics box.  It is useful for histograms but
+  // distracting for a geometry drawing where there is no statistical sample.
   gStyle->SetOptStat(0);
 
   TCanvas* canvas = new TCanvas(canvasName.c_str(), "CaloHitter calorimeter disks", 1500, 750);
@@ -460,7 +671,7 @@ inline TCanvas* drawCalorimeterDisks(const std::vector<Calorimeter>& calorimeter
   // ROOT pads are numbered from 1, not 0.
   for (size_t i = 0; i < calorimeters.size(); ++i) {
     canvas->cd(static_cast<int>(i + 1));
-    drawCalorimeterDisk(calorimeters.at(i));
+    drawCalorimeterDisk(calorimeters.at(i), selectedHits);
   }
 
   canvas->cd();
@@ -469,11 +680,22 @@ inline TCanvas* drawCalorimeterDisks(const std::vector<Calorimeter>& calorimeter
   return canvas;
 }
 
+// Backward-compatible blank two-disk draw entry point.
+inline TCanvas* drawCalorimeterDisks(const std::vector<Calorimeter>& calorimeters,
+                                     const std::string& canvasName = "cCaloHitter")
+{
+  const std::vector<SelectedHit> selectedHits;
+  return drawCalorimeterDisks(calorimeters, selectedHits, canvasName);
+}
+
 // Convenience entry point for scripts and macros.  It builds the blank
 // calorimeter, draws it, saves the canvas as a PDF, and prints a count summary.
 inline TCanvas* saveCalorimeterPdf(const std::string& outputPdf =
                                      std::string(detail::kDefaultPlotDirectory) +
-                                     "/CaloHitter_CalorimeterDisks.pdf")
+                                     "/CaloHitter_CalorimeterDisks.pdf",
+                                   const std::vector<SelectedHit>& selectedHits =
+                                     std::vector<SelectedHit>(),
+                                   const std::string& canvasName = "cCaloHitter")
 {
   // Batch mode prevents ROOT from opening GUI windows when the macro is run from
   // a terminal or batch job.  Restore the user's previous setting before return.
@@ -481,7 +703,10 @@ inline TCanvas* saveCalorimeterPdf(const std::string& outputPdf =
   gROOT->SetBatch(true);
 
   const std::vector<Calorimeter> calorimeters = buildCalorimeters();
-  TCanvas* canvas = drawCalorimeterDisks(calorimeters);
+  TCanvas* canvas = drawCalorimeterDisks(calorimeters, selectedHits, canvasName);
+
+  // ROOT will not create missing directories during Print(), so prepare the
+  // output directory first and then write the PDF.
   detail::ensureOutputDirectory(outputPdf);
   canvas->Print(outputPdf.c_str());
 
