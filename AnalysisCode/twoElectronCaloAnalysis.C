@@ -61,6 +61,12 @@
 // structures available for the next analysis layer.
 #include "CaloHitter.hh"
 
+// Helper for matching the two selected trkcalohit objects back to event-level
+// caloclusters and calculating the distance between their cluster COGs.  The
+// implementation is included here so this ROOT macro can run without a separate
+// build-system target for the helper.
+#include "TwoElectronCaloClusterDistance.C"
+
 using namespace std;
 using namespace rooutil;
 
@@ -119,6 +125,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
   outputFile << "# twoElectronCaloAnalysis output\n"
              << "# Selected event definition: exactly two valid rank-0 trkmcsim electrons among reconstructed e-minus tracks.\n"
              << "# Cluster coordinates are caloclusters.cog_ in the calorimeter disk front-face frame.\n"
+             << "# Cluster COG distance matches each selected trkcalohit back to caloclusters by disk, energy, time, and size.\n"
+             << "# Cross-disk COG distances are computed in the stored disk front-face coordinates, not global detector coordinates.\n"
              << "# Crystal-hit lines use parent cluster COG xyz because EventNtuple calohits do not store per-crystal xyz.\n"
              << "# Per-crystal CRYSTAL_HIT detail lines are disabled unless printCrystalHitDetails is true.\n"
              << "# Crystal-hit histograms are still filled even when text detail lines are disabled.\n"
@@ -320,6 +328,14 @@ void twoElectronCaloAnalysis(const string& generatorName,
     2 * caloEnergyBins, caloEnergyMin, clusterCrystalHitEnergySumMax,
     2 * caloEnergyBins, caloEnergyMin, clusterCrystalHitEnergySumMax);
 
+  // Two-electron matched-cluster COG distance histograms.  These are filled
+  // only for selected two-rank0-electron events where both selected trkcalohit
+  // objects can be matched back to event-level caloclusters.
+  TH1F* hTwoElectronClusterCogDistance3D =
+    twoelectroncalocog::makeClusterCogDistance3DHistogram();
+  TH1F* hTwoElectronClusterCogDistanceXY =
+    twoelectroncalocog::makeClusterCogDistanceXYHistogram();
+
   // Small local record for the two electrons we are trying to identify.  It
   // keeps the reconstructed track index, its rank-0 MC truth match, and the
   // optional track-to-calorimeter association in one object.
@@ -388,6 +404,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
   long long selectedEventsWithBothElectronsOnFrontDisk = 0;
   long long selectedEventsWithBothElectronsOnBackDisk = 0;
   long long selectedEventsWithFrontBackElectronCaloDisks = 0;
+  long long selectedEventsWithClusterCogDistance = 0;
+  long long selectedEventsWithoutClusterCogDistance = 0;
 
   // Main EventNtuple loop.  Each event is examined independently, then rejected
   // unless it has exactly two reconstructed e- tracks with valid rank-0 truth.
@@ -732,6 +750,30 @@ void twoElectronCaloAnalysis(const string& generatorName,
       }
     }
 
+    // Match the two selected track-associated calorimeter objects back to the
+    // event-level caloclusters collection and measure the distance between the
+    // two cluster COGs.  The COGs are caloclusters.cog_ values in the disk
+    // front-face coordinate frame.
+    const auto cogDistanceResult =
+      twoelectroncalocog::calculateTwoElectronClusterCogDistance(
+        rank0ElectronTracks.at(0).trkcalohit,
+        rank0ElectronTracks.at(1).trkcalohit,
+        event.caloclusters);
+    twoelectroncalocog::fillClusterCogDistanceHistograms(
+      cogDistanceResult,
+      hTwoElectronClusterCogDistance3D,
+      hTwoElectronClusterCogDistanceXY);
+    if (cogDistanceResult.valid)
+    {
+      ++selectedEventsWithClusterCogDistance;
+    }
+    else
+    {
+      ++selectedEventsWithoutClusterCogDistance;
+    }
+    printSelectedLine(
+      twoelectroncalocog::formatClusterCogDistanceLine(cogDistanceResult));
+
     // The event-level caloclusters collection contains calorimeter clusters
     // independent of whether a particular track was matched to one.  A selected
     // two-electron event can still have no reconstructed calorimeter cluster.
@@ -1030,6 +1072,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
              << "# selected_events_with_both_electrons_on_front_disk " << selectedEventsWithBothElectronsOnFrontDisk << '\n'
              << "# selected_events_with_both_electrons_on_back_disk " << selectedEventsWithBothElectronsOnBackDisk << '\n'
              << "# selected_events_with_front_back_electron_calo_disks " << selectedEventsWithFrontBackElectronCaloDisks << '\n'
+             << "# selected_events_with_cluster_cog_distance " << selectedEventsWithClusterCogDistance << '\n'
+             << "# selected_events_without_cluster_cog_distance " << selectedEventsWithoutClusterCogDistance << '\n'
              << "# first_front_front_display_found " << (firstFrontFrontDisplay.found ? 1 : 0) << '\n'
              << "# first_front_front_display_entry " << firstFrontFrontDisplay.entry
              << " run " << firstFrontFrontDisplay.run
@@ -1054,7 +1098,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
              << "# histogram_cluster_entries " << hClusterEnergy->GetEntries() << '\n'
              << "# histogram_crystal_hit_entries " << hCrystalHitEnergy->GetEntries() << '\n'
              << "# histogram_cluster_crystal_hit_energy_sum_entries " << hClusterCrystalHitEnergySum->GetEntries() << '\n'
-             << "# histogram_selected_event_crystal_hit_energy_sum_entries " << hSelectedEventCrystalHitEnergySum->GetEntries() << '\n';
+             << "# histogram_selected_event_crystal_hit_energy_sum_entries " << hSelectedEventCrystalHitEnergySum->GetEntries() << '\n'
+             << "# histogram_two_electron_cluster_cog_distance_entries " << hTwoElectronClusterCogDistance3D->GetEntries() << '\n';
 
   outputFile << "# selected_events_pct_of_ntuple_entries "
              << percentOf(selectedEventCount, numEvents) << '\n'
@@ -1106,6 +1151,10 @@ void twoElectronCaloAnalysis(const string& generatorName,
   cout << "  selected events with both electrons on the Front disk: " << selectedEventsWithBothElectronsOnFrontDisk << endl;
   cout << "  selected events with both electrons on the Back disk: " << selectedEventsWithBothElectronsOnBackDisk << endl;
   cout << "  selected events with one Front electron and one Back electron: " << selectedEventsWithFrontBackElectronCaloDisks << endl;
+  cout << "  selected events with matched cluster COG distance: "
+       << selectedEventsWithClusterCogDistance << endl;
+  cout << "  selected events without matched cluster COG distance: "
+       << selectedEventsWithoutClusterCogDistance << endl;
   cout << "\nDisk topology percentages:" << endl;
   cout << "  denominator selected two-rank0-electron events: " << selectedEventCount << endl;
   cout << "  denominator valid two-electron calo disk IDs: " << selectedEventsWithBothElectronCaloDisks << endl;
@@ -1204,6 +1253,8 @@ void twoElectronCaloAnalysis(const string& generatorName,
     hClusterCrystalHitEnergySum->Write();
     hSelectedEventCrystalHitEnergySum->Write();
     hClusterEnergyVsCrystalHitEnergySum->Write();
+    hTwoElectronClusterCogDistance3D->Write();
+    hTwoElectronClusterCogDistanceXY->Write();
     histogramFile.Close();
     cout << "Wrote calorimeter histogram ROOT file to " << histogramRootFileName << endl;
   }
@@ -1451,7 +1502,26 @@ void twoElectronCaloAnalysis(const string& generatorName,
   hClusterTime->Draw("HIST");
   cClusters->SaveAs(clusterPdfName.c_str());
 
-  // PDF group 10: crystal-hit diagnostics.  The left plot counts individual
+  // PDF group 10: matched cluster COG distance for the two selected electrons.
+  // The matching is from each selected trkcalohit back to caloclusters, then
+  // the distance is calculated using caloclusters.cog_ in disk front-face
+  // coordinates.
+  const string clusterCogDistancePdfName =
+    caloPlotsDirectory + "/twoElectronCaloAnalysis_" + generatorName + "_TwoElectronClusterCogDistance.pdf";
+  TCanvas* cClusterCogDistance = new TCanvas(
+    "cClusterCogDistance",
+    "Two selected reconstructed electrons: matched calo cluster COG distance",
+    1200, 500);
+  cClusterCogDistance->Divide(2, 1);
+  cClusterCogDistance->cd(1);
+  styleLineHistogram(hTwoElectronClusterCogDistance3D, kBlack, 1);
+  hTwoElectronClusterCogDistance3D->Draw("HIST");
+  cClusterCogDistance->cd(2);
+  styleLineHistogram(hTwoElectronClusterCogDistanceXY, kBlack, 1);
+  hTwoElectronClusterCogDistanceXY->Draw("HIST");
+  cClusterCogDistance->SaveAs(clusterCogDistancePdfName.c_str());
+
+  // PDF group 11: crystal-hit diagnostics.  The left plot counts individual
   // crystal hits by deposited energy.  The right plot accumulates deposited
   // energy by global crystal ID, which is the information that can later be
   // painted onto the CaloHitter geometry.
@@ -1468,7 +1538,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
   hCrystalEnergyById->Draw("HIST");
   cCrystalHits->SaveAs(crystalPdfName.c_str());
 
-  // PDF group 11: summed crystal-hit energies.  These plots answer the question
+  // PDF group 12: summed crystal-hit energies.  These plots answer the question
   // "how much energy is carried by all reconstructed hit crystals together?"
   // rather than treating each crystal as one independent entry.
   const string crystalSumPdfName =
@@ -1496,6 +1566,7 @@ void twoElectronCaloAnalysis(const string& generatorName,
   cout << "  " << twoElectronTrackCaloMomentumPdfName << endl;
   cout << "  " << twoElectronTrackCaloMomentumLogPdfName << endl;
   cout << "  " << clusterPdfName << endl;
+  cout << "  " << clusterCogDistancePdfName << endl;
   cout << "  " << crystalPdfName << endl;
   cout << "  " << crystalSumPdfName << endl;
 
