@@ -1520,6 +1520,16 @@ void twoElectronCaloAnalysis(const string& generatorName,
   styleLineHistogram(hTwoElectronClusterCogDistanceXY, kBlack, 1);
   hTwoElectronClusterCogDistanceXY->Draw("HIST");
   cClusterCogDistance->SaveAs(clusterCogDistancePdfName.c_str());
+  if (gSystem != nullptr && gSystem->AccessPathName(clusterCogDistancePdfName.c_str()))
+  {
+    cerr << "ERROR: cluster COG distance PDF was not found after SaveAs: "
+         << clusterCogDistancePdfName << endl;
+  }
+  else
+  {
+    cout << "Verified cluster COG distance PDF: "
+         << clusterCogDistancePdfName << endl;
+  }
 
   // PDF group 11: crystal-hit diagnostics.  The left plot counts individual
   // crystal hits by deposited energy.  The right plot accumulates deposited
