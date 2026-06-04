@@ -84,6 +84,10 @@
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TVectorFfwd.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TVectorDfwd.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TFitResultPtr.h
+./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TH2F.h
+./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TH2.h
+./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TMatrixFBasefwd.h
+./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TMatrixDBasefwd.h
 ./twoElectronTrkSegVertexer_C.so: /exp/mu2e/app/users/aboldy/workDir/EventNtuple/inc/EventInfo.hh
 ./twoElectronTrkSegVertexer_C.so: /exp/mu2e/app/users/aboldy/workDir/EventNtuple/inc/TrkSegInfo.hh
 ./twoElectronTrkSegVertexer_C.so: /exp/mu2e/app/users/aboldy/workDir/EventNtuple/inc/RootVectors.hh
