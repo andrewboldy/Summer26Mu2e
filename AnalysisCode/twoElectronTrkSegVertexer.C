@@ -29,6 +29,11 @@
 // Usage from ROOT:
 //   .L CreatedCode/twoElectronTrkSegVertexer.C+
 //   twoElectronTrkSegVertexer("reduced.root")
+//   twoElectronTrkSegVertexer("reduced.root", -1, false, false)
+//
+//   The optional fourth argument controls whether ROOT displays canvases
+//   interactively while saving the PDF files.  Set it to false for quieter,
+//   lower-lag batch-style plotting.
 //
 //   The input can also be a filelist containing reduced ROOT files.
 //
@@ -47,9 +52,13 @@
 #include <vector>
 
 #include <TChain.h>
+#include <TBox.h>
 #include <TCanvas.h>
+#include <TEllipse.h>
 #include <TH1F.h>
 #include <TH2F.h>
+#include <TMarker.h>
+#include <TROOT.h>
 #include <TVirtualPad.h>
 
 #include "EventNtuple/inc/EventInfo.hh"
@@ -59,6 +68,46 @@ using namespace std;
 
 namespace
 {
+  // Stopping-target overlay geometry, expressed in the same tracker/detector
+  // coordinates as the vertex maps:
+  //   - EventNtuple/inc/TrkSegInfo.hh documents TrkSegInfo::pos as positions
+  //     in mm WRT the tracker center.
+  //   - EventNtuple/src/InfoStructHelper.cc stores kinter.position3()
+  //     directly into TrkSegInfo::pos in fillTrkSegInfo().
+  //   - Offline/GeometryService/src/StoppingTargetMaker.cc says stopping
+  //     target positions are in detector coordinates and builds TargetFoil
+  //     centers from the geometry config plus the DetectorSystem origin.
+  //   - Offline/Mu2eG4/geom/geom_run2.txt sets mu2e.detectorSystemZ0=10171
+  //     and includes stoppingTargetHoles_v02.txt.
+  //   - stoppingTargetHoles_v02.txt includes
+  //     stoppingTargetHoles_DOE_review_2017.txt, which sets
+  //     stoppingTarget.holeRadius=21.5 mm, stoppingTarget.rOut=75 mm for the
+  //     foils, and stoppingTarget.deltaZ=22.222222 mm.  The base target file
+  //     stoppingTarget_CD3C_34foils.txt sets stoppingTarget.z0InMu2e=5871 mm,
+  //     while stoppingTargetHoles_v02.txt sets the foil half-thickness to
+  //     0.0528 mm.
+  //
+  // For geom_run2, detector/tracker z = Mu2e z - 10171 mm.  With 37 foils,
+  // these config values give foil centers from about -4700 to -3900 mm and
+  // physical foil faces from -4700.053 to -3899.947 mm.  The XY annulus is
+  // centered at (0,0) because the same geometry config leaves the foil x/y
+  // offsets at 0.
+  const double kStoppingTargetCenterX = 0.0;
+  const double kStoppingTargetCenterY = 0.0;
+  const double kStoppingTargetHoleRadius = 21.5;
+  const double kStoppingTargetOuterRadius = 75.0;
+  const double kStoppingTargetXYMin = -kStoppingTargetOuterRadius;
+  const double kStoppingTargetXYMax = kStoppingTargetOuterRadius;
+  const double kStoppingTargetZMin = -4700.053;
+  const double kStoppingTargetZMax = -3899.947;
+
+  enum VertexProjection
+  {
+    kVertexXY,
+    kVertexXZ,
+    kVertexYZ
+  };
+
   //============================================================================
   // Input Helpers
   //============================================================================
@@ -273,6 +322,79 @@ namespace
     return result;
   }
 
+  XYZVectorF midpointBetweenClosestApproachPoints(const LineSeparation3D& lineSeparation)
+  {
+    // The closest points are built from TrkSegInfo surface positions, which are
+    // already stored in tracker/detector coordinates.  This midpoint therefore
+    // stays in the same coordinate frame as the stopping-target overlay below.
+    return 0.5 * (lineSeparation.closestPointOnFirst +
+                  lineSeparation.closestPointOnSecond);
+  }
+
+  void drawStoppingTargetBox(VertexProjection projection)
+  {
+    if (projection == kVertexXY)
+    {
+      TEllipse outerFoilEdge(kStoppingTargetCenterX,
+                             kStoppingTargetCenterY,
+                             kStoppingTargetOuterRadius,
+                             kStoppingTargetOuterRadius);
+      outerFoilEdge.SetFillStyle(0);
+      outerFoilEdge.SetLineColor(kRed + 1);
+      outerFoilEdge.SetLineWidth(3);
+      outerFoilEdge.DrawClone("same");
+
+      TEllipse innerFoilHole(kStoppingTargetCenterX,
+                             kStoppingTargetCenterY,
+                             kStoppingTargetHoleRadius,
+                             kStoppingTargetHoleRadius);
+      innerFoilHole.SetFillStyle(0);
+      innerFoilHole.SetLineColor(kRed + 1);
+      innerFoilHole.SetLineWidth(3);
+      innerFoilHole.SetLineStyle(2);
+      innerFoilHole.DrawClone("same");
+
+      TMarker targetCenter(kStoppingTargetCenterX, kStoppingTargetCenterY, 2);
+      targetCenter.SetMarkerColor(kRed + 1);
+      targetCenter.SetMarkerSize(1.2);
+      targetCenter.DrawClone("same");
+      return;
+    }
+
+    double boxXMin = kStoppingTargetXYMin;
+    double boxXMax = kStoppingTargetXYMax;
+    double boxYMin = kStoppingTargetXYMin;
+    double boxYMax = kStoppingTargetXYMax;
+
+    // For XZ and YZ maps, the red box spans the foil's outer transverse
+    // radius in the horizontal coordinate and the physical foil z-face bounds
+    // in tracker/detector z.  Those numbers come from the geometry files
+    // listed in the constants block above.
+    if (projection == kVertexXZ || projection == kVertexYZ)
+    {
+      boxYMin = kStoppingTargetZMin;
+      boxYMax = kStoppingTargetZMax;
+    }
+
+    TBox targetBox(boxXMin, boxYMin, boxXMax, boxYMax);
+    targetBox.SetFillStyle(0);
+    targetBox.SetLineColor(kRed + 1);
+    targetBox.SetLineWidth(3);
+    targetBox.DrawClone("same");
+  }
+
+  void draw2DHistogram(const string& canvasName,
+                       const string& canvasTitle,
+                       TH2F* histogram,
+                       VertexProjection targetProjection,
+                       const string& outputPath)
+  {
+    TCanvas* canvas = new TCanvas(canvasName.c_str(), canvasTitle.c_str(), 900, 700);
+    histogram->Draw("COLZ");
+    drawStoppingTargetBox(targetProjection);
+    canvas->SaveAs(outputPath.c_str());
+  }
+
   void drawHistogramPad(TCanvas* canvas, int padNumber, TH1F* histogram, bool useLogY)
   {
     TVirtualPad* pad = canvas->cd(padNumber);
@@ -323,7 +445,8 @@ namespace
 
 void twoElectronTrkSegVertexer(const string& inputName,
                                int maxEvents = -1,
-                               bool doFullPrintout = true)
+                               bool doFullPrintout = true,
+                               bool displayCanvases = true)
 {
   // The reduced tree created by the selector stores one row per selected event.
   const string treeName = "TwoElectronTrackVertexCandidates";
@@ -550,6 +673,11 @@ void twoElectronTrkSegVertexer(const string& inputName,
   cout << "Output mode: "
        << (doFullPrintout ? "shared-surface vertex printout" : "summary only")
        << endl;
+  const bool originalRootBatchMode = gROOT->IsBatch();
+  gROOT->SetBatch(!displayCanvases);
+  cout << "Canvas display: "
+       << (displayCanvases ? "enabled" : "disabled; PDFs are still saved")
+       << endl;
 
   // Summary counters for the final footer.
   Long64_t eventsPrinted = 0;
@@ -565,7 +693,14 @@ void twoElectronTrkSegVertexer(const string& inputName,
   double smallestEventMinSTFoilDistance = numeric_limits<double>::infinity();
   double largestEventMinSTFoilDistance = -numeric_limits<double>::infinity();
   const double trackMomentumCutMin = 50.0;
-  const double trackMomentumCutMax = 54.0;
+  const double trackMomentumCutMax = 53.0;
+  const double momentumCutReferenceEventCount = 100000.0;
+  const double vertexXYMin = -600.0;
+  const double vertexXYMax = 600.0;
+  const double vertexZMin = -5000.0;
+  const double vertexZMax = -3000.0;
+  const int vertexXYBins = 200;
+  const int vertexZBins = 405;
   TH1F* hEventMinSTFoilDistance = new TH1F(
     "hEventMinSTFoilDistance",
     "Event-level closest shared ST_Foils line distance;closest shared ST_Foils line distance [mm];Events",
@@ -615,6 +750,21 @@ void twoElectronTrkSegVertexer(const string& inputName,
     "TEST: event-level closest shared ST_Foils line distance vs absolute shared-foil track-segment time difference;|track-segment time 1 - track-segment time 2| [ns];closest shared ST_Foils line distance [mm]",
     200, 0.0, 600.0,
     200, 0.0, 20.0);
+  TH2F* hEventMinSTFoilVertexXY = new TH2F(
+    "hEventMinSTFoilVertexXY",
+    "Event-level closest shared ST_Foils midpoint vertex XY;vertex x [mm];vertex y [mm]",
+    vertexXYBins, vertexXYMin, vertexXYMax,
+    vertexXYBins, vertexXYMin, vertexXYMax);
+  TH2F* hEventMinSTFoilVertexXZ = new TH2F(
+    "hEventMinSTFoilVertexXZ",
+    "Event-level closest shared ST_Foils midpoint vertex XZ;vertex x [mm];vertex z [mm]",
+    vertexXYBins, vertexXYMin, vertexXYMax,
+    vertexZBins, vertexZMin, vertexZMax);
+  TH2F* hEventMinSTFoilVertexYZ = new TH2F(
+    "hEventMinSTFoilVertexYZ",
+    "Event-level closest shared ST_Foils midpoint vertex YZ;vertex y [mm];vertex z [mm]",
+    vertexXYBins, vertexXYMin, vertexXYMax,
+    vertexZBins, vertexZMin, vertexZMax);
   TH1F* hEventMinSTFoilDistanceMomentumCut = new TH1F(
     "hEventMinSTFoilDistanceMomentumCut",
     "Momentum cut: event-level closest shared ST_Foils line distance;closest shared ST_Foils line distance [mm];Events",
@@ -660,6 +810,21 @@ void twoElectronTrkSegVertexer(const string& inputName,
     "TEST: Momentum cut: event-level closest shared ST_Foils line distance vs absolute shared-foil track-segment time difference;|track-segment time 1 - track-segment time 2| [ns];closest shared ST_Foils line distance [mm]",
     200, 0.0, 600.0,
     200, 0.0, 20.0);
+  TH2F* hEventMinSTFoilVertexXYMomentumCut = new TH2F(
+    "hEventMinSTFoilVertexXYMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils midpoint vertex XY;vertex x [mm];vertex y [mm]",
+    vertexXYBins, vertexXYMin, vertexXYMax,
+    vertexXYBins, vertexXYMin, vertexXYMax);
+  TH2F* hEventMinSTFoilVertexXZMomentumCut = new TH2F(
+    "hEventMinSTFoilVertexXZMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils midpoint vertex XZ;vertex x [mm];vertex z [mm]",
+    vertexXYBins, vertexXYMin, vertexXYMax,
+    vertexZBins, vertexZMin, vertexZMax);
+  TH2F* hEventMinSTFoilVertexYZMomentumCut = new TH2F(
+    "hEventMinSTFoilVertexYZMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils midpoint vertex YZ;vertex y [mm];vertex z [mm]",
+    vertexXYBins, vertexXYMin, vertexXYMax,
+    vertexZBins, vertexZMin, vertexZMax);
 
   for (Long64_t iEntry = 0; iEntry < entriesToRead; ++iEntry)
   {
@@ -714,6 +879,7 @@ void twoElectronTrkSegVertexer(const string& inputName,
     const int nSharedSurfaces = sharedSurfaceCount;
     const int nSharedFoils = sharedSTFoilCount;
 
+    sharedSurfacesPrinted += nSharedSurfaces;
     if (nSharedFoils > 0)
     {
       ++eventsBySharedFoilMultiplicity[nSharedFoils];
@@ -762,84 +928,88 @@ void twoElectronTrkSegVertexer(const string& inputName,
                                            selectedTrackCaloMomZ->at(1))
            << " |p|=" << track1MomMag << " MeV/c"
            << endl;
+    }
 
-      // Sort the shared surfaces chronologically by the mean of the two track
-      // times at that surface.
-      const vector<SharedSurfacePrintOrder> orderedSharedSurfaces =
-        sortedSharedSurfaceIndicesByTime(*sharedSurfaceFirstTime, *sharedSurfaceSecondTime);
+    // Sort the shared surfaces chronologically by the mean of the two track
+    // times at that surface.  This is done even in summary-only mode because
+    // the same ordered loop fills the distance and vertex histograms.
+    const vector<SharedSurfacePrintOrder> orderedSharedSurfaces =
+      sortedSharedSurfaceIndicesByTime(*sharedSurfaceFirstTime, *sharedSurfaceSecondTime);
 
-      // Shared ST foil lines are stored explicitly so the event can later be
-      // fed into a vertexing calculation without re-parsing the full printout.
-      // One event can have multiple shared foil surfaces, so we cache them
-      // locally as line objects while we print the event.
-      vector<Line3D> firstTrackFoilLines;
-      vector<Line3D> secondTrackFoilLines;
-      // Track the closest ST-foil pair for this event.  The vertex study uses
-      // the minimum separation across all shared foils, not every raw value.
-      double eventMinSTFoilDistance = numeric_limits<double>::infinity();
-      XYZVectorF eventMinSeparation = XYZVectorF();
-      int eventMinFoilSindex = -1;
-      int eventMinFoilSid = -1;
-      double eventMinFirstTime = numeric_limits<double>::quiet_NaN();
-      double eventMinSecondTime = numeric_limits<double>::quiet_NaN();
-      double eventMinSTFoilDistanceMomentumCut = numeric_limits<double>::infinity();
-      XYZVectorF eventMinSeparationMomentumCut = XYZVectorF();
-      double eventMinFirstTimeMomentumCut = numeric_limits<double>::quiet_NaN();
-      double eventMinSecondTimeMomentumCut = numeric_limits<double>::quiet_NaN();
+    // Shared ST foil lines are stored explicitly so the event can later be fed
+    // into a vertexing calculation without re-parsing the full printout.  One
+    // event can have multiple shared foil surfaces, so we cache them locally as
+    // line objects while scanning the event.
+    vector<Line3D> firstTrackFoilLines;
+    vector<Line3D> secondTrackFoilLines;
+    // Track the closest ST-foil pair for this event.  The vertex study uses
+    // the minimum separation across all shared foils, not every raw value.
+    double eventMinSTFoilDistance = numeric_limits<double>::infinity();
+    XYZVectorF eventMinSeparation = XYZVectorF();
+    XYZVectorF eventMinVertex = XYZVectorF();
+    int eventMinFoilSindex = -1;
+    int eventMinFoilSid = -1;
+    double eventMinFirstTime = numeric_limits<double>::quiet_NaN();
+    double eventMinSecondTime = numeric_limits<double>::quiet_NaN();
+    double eventMinSTFoilDistanceMomentumCut = numeric_limits<double>::infinity();
+    XYZVectorF eventMinSeparationMomentumCut = XYZVectorF();
+    XYZVectorF eventMinVertexMomentumCut = XYZVectorF();
+    double eventMinFirstTimeMomentumCut = numeric_limits<double>::quiet_NaN();
+    double eventMinSecondTimeMomentumCut = numeric_limits<double>::quiet_NaN();
 
-      for (size_t iOrder = 0; iOrder < orderedSharedSurfaces.size(); ++iOrder)
+    for (size_t iOrder = 0; iOrder < orderedSharedSurfaces.size(); ++iOrder)
+    {
+      // Pick out the stored row for this shared surface.
+      const size_t iShared = orderedSharedSurfaces.at(iOrder).index;
+      const int sid = sharedSurfaceSid->at(iShared);
+      const int sindex = sharedSurfaceSindex->at(iShared);
+
+      const string surfaceLabel = formatSurfaceLabel(sid, sindex);
+      const double firstTime = sharedSurfaceFirstTime->at(iShared);
+      const double secondTime = sharedSurfaceSecondTime->at(iShared);
+      const double firstMomX = sharedSurfaceFirstMomX->at(iShared);
+      const double firstMomY = sharedSurfaceFirstMomY->at(iShared);
+      const double firstMomZ = sharedSurfaceFirstMomZ->at(iShared);
+      const double secondMomX = sharedSurfaceSecondMomX->at(iShared);
+      const double secondMomY = sharedSurfaceSecondMomY->at(iShared);
+      const double secondMomZ = sharedSurfaceSecondMomZ->at(iShared);
+      const double firstPosX = sharedSurfaceFirstPosX->at(iShared);
+      const double firstPosY = sharedSurfaceFirstPosY->at(iShared);
+      const double firstPosZ = sharedSurfaceFirstPosZ->at(iShared);
+      const double secondPosX = sharedSurfaceSecondPosX->at(iShared);
+      const double secondPosY = sharedSurfaceSecondPosY->at(iShared);
+      const double secondPosZ = sharedSurfaceSecondPosZ->at(iShared);
+      if (sid == mu2e::SurfaceIdDetail::ST_Foils)
       {
-        // Pick out the stored row for this shared surface.
-        const size_t iShared = orderedSharedSurfaces.at(iOrder).index;
-        const int sid = sharedSurfaceSid->at(iShared);
-        const int sindex = sharedSurfaceSindex->at(iShared);
+        // For foil surfaces, the line geometry is what we care about: the
+        // position where each track crosses the foil and the direction of
+        // that track at the crossing.
+        const double firstMomMag = sqrt(firstMomX * firstMomX +
+                                        firstMomY * firstMomY +
+                                        firstMomZ * firstMomZ);
+        const double secondMomMag = sqrt(secondMomX * secondMomX +
+                                         secondMomY * secondMomY +
+                                         secondMomZ * secondMomZ);
+        const bool passesMomentumCut =
+          passesTrackMomentumCut(firstMomMag,
+                                 secondMomMag,
+                                 trackMomentumCutMin,
+                                 trackMomentumCutMax);
 
-        const string surfaceLabel = formatSurfaceLabel(sid, sindex);
-        const double firstTime = sharedSurfaceFirstTime->at(iShared);
-        const double secondTime = sharedSurfaceSecondTime->at(iShared);
-        const double firstMomX = sharedSurfaceFirstMomX->at(iShared);
-        const double firstMomY = sharedSurfaceFirstMomY->at(iShared);
-        const double firstMomZ = sharedSurfaceFirstMomZ->at(iShared);
-        const double secondMomX = sharedSurfaceSecondMomX->at(iShared);
-        const double secondMomY = sharedSurfaceSecondMomY->at(iShared);
-        const double secondMomZ = sharedSurfaceSecondMomZ->at(iShared);
-        const double firstPosX = sharedSurfaceFirstPosX->at(iShared);
-        const double firstPosY = sharedSurfaceFirstPosY->at(iShared);
-        const double firstPosZ = sharedSurfaceFirstPosZ->at(iShared);
-        const double secondPosX = sharedSurfaceSecondPosX->at(iShared);
-        const double secondPosY = sharedSurfaceSecondPosY->at(iShared);
-        const double secondPosZ = sharedSurfaceSecondPosZ->at(iShared);
-        if (sid == mu2e::SurfaceIdDetail::ST_Foils)
+        // For shared foil surfaces, construct the 3D line objects from the
+        // surface position and the unit momentum vector at that surface.
+        const Line3D firstLine = makeLine3D(
+          XYZVectorF(firstPosX, firstPosY, firstPosZ),
+          XYZVectorF(firstMomX, firstMomY, firstMomZ));
+        const Line3D secondLine = makeLine3D(
+          XYZVectorF(secondPosX, secondPosY, secondPosZ),
+          XYZVectorF(secondMomX, secondMomY, secondMomZ));
+        const LineSeparation3D lineSeparation = lineLineSeparation(firstLine, secondLine);
+        firstTrackFoilLines.push_back(firstLine);
+        secondTrackFoilLines.push_back(secondLine);
+
+        if (doFullPrintout)
         {
-          // For foil surfaces, the line geometry is what we care about: the
-          // position where each track crosses the foil and the direction of
-          // that track at the crossing.
-          // Magnitudes are printed explicitly because the vertex calculation will
-          // usually care about both the direction and the scale of the momentum.
-          const double firstMomMag = sqrt(firstMomX * firstMomX +
-                                          firstMomY * firstMomY +
-                                          firstMomZ * firstMomZ);
-          const double secondMomMag = sqrt(secondMomX * secondMomX +
-                                           secondMomY * secondMomY +
-                                           secondMomZ * secondMomZ);
-          const bool passesMomentumCut =
-            passesTrackMomentumCut(firstMomMag,
-                                   secondMomMag,
-                                   trackMomentumCutMin,
-                                   trackMomentumCutMax);
-
-          // For shared foil surfaces, construct the 3D line objects from the
-          // surface position and the unit momentum vector at that surface.
-          const Line3D firstLine = makeLine3D(
-            XYZVectorF(firstPosX, firstPosY, firstPosZ),
-            XYZVectorF(firstMomX, firstMomY, firstMomZ));
-          const Line3D secondLine = makeLine3D(
-            XYZVectorF(secondPosX, secondPosY, secondPosZ),
-            XYZVectorF(secondMomX, secondMomY, secondMomZ));
-          const LineSeparation3D lineSeparation = lineLineSeparation(firstLine, secondLine);
-          firstTrackFoilLines.push_back(firstLine);
-          secondTrackFoilLines.push_back(secondLine);
-
           // Print the signed component-wise closest-point separation together
           // with the scalar distance and the line geometry used to compute it.
           cout << "  shared_surface_time_order=" << setw(3) << iOrder
@@ -868,136 +1038,157 @@ void twoElectronTrkSegVertexer(const string& inputName,
                << " second_line_unit_mom=" << formatVector3(secondLine.unitMom.x(),
                                                             secondLine.unitMom.y(),
                                                             secondLine.unitMom.z());
-          if (lineSeparation.valid)
+        }
+        if (lineSeparation.valid)
+        {
+          const XYZVectorF vertexMidpoint =
+            midpointBetweenClosestApproachPoints(lineSeparation);
+          if (doFullPrintout)
           {
             cout << " line_dx=" << lineSeparation.separation.x() << " mm"
                  << " line_dy=" << lineSeparation.separation.y() << " mm"
                  << " line_dz=" << lineSeparation.separation.z() << " mm"
                  << " line_distance=" << lineSeparation.distance << " mm";
+          }
 
-            // This histogram is the full population of ST-foil line separations,
-            // not just the event-level minimum.  It is useful for understanding
-            // the raw spread of the geometry before the minimum-pick step.
-            hAllSTFoilLineDx->Fill(lineSeparation.separation.x());
-            hAllSTFoilLineDy->Fill(lineSeparation.separation.y());
-            hAllSTFoilLineDz->Fill(lineSeparation.separation.z());
-            hAllSTFoilLineRxy->Fill(
+          // This histogram is the full population of ST-foil line separations,
+          // not just the event-level minimum.  It is useful for understanding
+          // the raw spread of the geometry before the minimum-pick step.
+          hAllSTFoilLineDx->Fill(lineSeparation.separation.x());
+          hAllSTFoilLineDy->Fill(lineSeparation.separation.y());
+          hAllSTFoilLineDz->Fill(lineSeparation.separation.z());
+          hAllSTFoilLineRxy->Fill(
+            sqrt(lineSeparation.separation.x() * lineSeparation.separation.x() +
+                 lineSeparation.separation.y() * lineSeparation.separation.y()));
+          hAllSTFoilLineDistance->Fill(lineSeparation.distance);
+          if (passesMomentumCut)
+          {
+            hAllSTFoilLineDxMomentumCut->Fill(lineSeparation.separation.x());
+            hAllSTFoilLineDyMomentumCut->Fill(lineSeparation.separation.y());
+            hAllSTFoilLineDzMomentumCut->Fill(lineSeparation.separation.z());
+            hAllSTFoilLineRxyMomentumCut->Fill(
               sqrt(lineSeparation.separation.x() * lineSeparation.separation.x() +
                    lineSeparation.separation.y() * lineSeparation.separation.y()));
-            hAllSTFoilLineDistance->Fill(lineSeparation.distance);
-            if (passesMomentumCut)
-            {
-              hAllSTFoilLineDxMomentumCut->Fill(lineSeparation.separation.x());
-              hAllSTFoilLineDyMomentumCut->Fill(lineSeparation.separation.y());
-              hAllSTFoilLineDzMomentumCut->Fill(lineSeparation.separation.z());
-              hAllSTFoilLineRxyMomentumCut->Fill(
-                sqrt(lineSeparation.separation.x() * lineSeparation.separation.x() +
-                     lineSeparation.separation.y() * lineSeparation.separation.y()));
-              hAllSTFoilLineDistanceMomentumCut->Fill(lineSeparation.distance);
+            hAllSTFoilLineDistanceMomentumCut->Fill(lineSeparation.distance);
 
-              if (lineSeparation.distance < eventMinSTFoilDistanceMomentumCut)
-              {
-                eventMinSTFoilDistanceMomentumCut = lineSeparation.distance;
-                eventMinSeparationMomentumCut = lineSeparation.separation;
-                eventMinFirstTimeMomentumCut = firstTime;
-                eventMinSecondTimeMomentumCut = secondTime;
-              }
-            }
-
-            if (lineSeparation.distance < eventMinSTFoilDistance)
+            if (lineSeparation.distance < eventMinSTFoilDistanceMomentumCut)
             {
-              eventMinSTFoilDistance = lineSeparation.distance;
-              eventMinSeparation = lineSeparation.separation;
-              eventMinFoilSindex = sindex;
-              eventMinFoilSid = sid;
-              eventMinFirstTime = firstTime;
-              eventMinSecondTime = secondTime;
+              eventMinSTFoilDistanceMomentumCut = lineSeparation.distance;
+              eventMinSeparationMomentumCut = lineSeparation.separation;
+              eventMinVertexMomentumCut = vertexMidpoint;
+              eventMinFirstTimeMomentumCut = firstTime;
+              eventMinSecondTimeMomentumCut = secondTime;
             }
           }
-          else
+
+          if (lineSeparation.distance < eventMinSTFoilDistance)
+          {
+            eventMinSTFoilDistance = lineSeparation.distance;
+            eventMinSeparation = lineSeparation.separation;
+            eventMinVertex = vertexMidpoint;
+            eventMinFoilSindex = sindex;
+            eventMinFoilSid = sid;
+            eventMinFirstTime = firstTime;
+            eventMinSecondTime = secondTime;
+          }
+        }
+        else
+        {
+          if (doFullPrintout)
           {
             cout << " line_dx=undefined"
                  << " line_dy=undefined"
                  << " line_dz=undefined"
                  << " line_distance=undefined_parallel";
           }
-          cout << endl;
-
-          // Shared-surface counters are only for the final summary, so they are
-          // updated even if the verbose printout is suppressed later.
-          ++sharedSurfacesPrinted;
-          ++sharedSTFoilsPrinted;
         }
-      }
-
-      if (eventMinSTFoilDistanceMomentumCut < numeric_limits<double>::infinity())
-      {
-        ++eventsWithSharedSTFoilsMomentumCut;
-        hEventMinSTFoilLineDxMomentumCut->Fill(eventMinSeparationMomentumCut.x());
-        hEventMinSTFoilLineDyMomentumCut->Fill(eventMinSeparationMomentumCut.y());
-        hEventMinSTFoilLineDzMomentumCut->Fill(eventMinSeparationMomentumCut.z());
-        hEventMinSTFoilLineRxyMomentumCut->Fill(
-          sqrt(eventMinSeparationMomentumCut.x() * eventMinSeparationMomentumCut.x() +
-               eventMinSeparationMomentumCut.y() * eventMinSeparationMomentumCut.y()));
-        hEventMinSTFoilDistanceMomentumCut->Fill(eventMinSTFoilDistanceMomentumCut);
-        hEventMinSTFoilDistanceVsElectronTimeDiffMomentumCut->Fill(
-          fabs(eventMinFirstTimeMomentumCut - eventMinSecondTimeMomentumCut),
-          eventMinSTFoilDistanceMomentumCut);
-      }
-
-      // Keep the foil-line caches alive through this block so it is obvious
-      // they are intentionally gathered as part of the vertexing workflow.
-      // They are not consumed yet, but they define the exact data the next
-      // stage will use.
-      (void)firstTrackFoilLines;
-      (void)secondTrackFoilLines;
-
-      // Update the scan-wide min/max from the event-level minimum separation.
-      // That keeps the summary focused on the best ST-foil candidate per event.
-      if (eventMinSTFoilDistance < numeric_limits<double>::infinity())
-      {
-        ++eventsWithSharedSTFoils;
-        hEventMinSTFoilLineDx->Fill(eventMinSeparation.x());
-        hEventMinSTFoilLineDy->Fill(eventMinSeparation.y());
-        hEventMinSTFoilLineDz->Fill(eventMinSeparation.z());
-        hEventMinSTFoilLineRxy->Fill(
-          sqrt(eventMinSeparation.x() * eventMinSeparation.x() +
-               eventMinSeparation.y() * eventMinSeparation.y()));
-        hEventMinSTFoilDistance->Fill(eventMinSTFoilDistance);
-        hEventMinSTFoilDistanceVsElectronTimeDiff->Fill(
-          fabs(eventMinFirstTime - eventMinSecondTime),
-          eventMinSTFoilDistance);
-        if (eventMinSTFoilDistance < 1.0)
-        {
-          ++eventsWithMinDistanceUnder1mm;
-        }
-        if (eventMinSTFoilDistance < 0.5)
-        {
-          ++eventsWithMinDistanceUnder0p5mm;
-        }
-        if (eventMinSTFoilDistance < 0.1)
-        {
-          ++eventsWithMinDistanceUnder0p1mm;
-        }
-        if (eventMinSTFoilDistance < smallestEventMinSTFoilDistance)
-        {
-          smallestEventMinSTFoilDistance = eventMinSTFoilDistance;
-        }
-        if (eventMinSTFoilDistance > largestEventMinSTFoilDistance)
-        {
-          largestEventMinSTFoilDistance = eventMinSTFoilDistance;
-        }
-
         if (doFullPrintout)
         {
-          cout << "  event_smallest_shared_ST_Foils_line_distance="
-               << eventMinSTFoilDistance << " mm"
-               << " event_smallest_line_dx=" << eventMinSeparation.x() << " mm"
-               << " event_smallest_line_dy=" << eventMinSeparation.y() << " mm"
-               << " event_smallest_line_dz=" << eventMinSeparation.z() << " mm"
-               << " surface=" << formatSurfaceLabel(eventMinFoilSid, eventMinFoilSindex)
-               << endl;
+          cout << endl;
         }
+
+        // Shared-ST-foil counters are only for the final summary, so they are
+        // updated even when the verbose printout is suppressed.
+        ++sharedSTFoilsPrinted;
+      }
+    }
+
+    if (eventMinSTFoilDistanceMomentumCut < numeric_limits<double>::infinity())
+    {
+      ++eventsWithSharedSTFoilsMomentumCut;
+      hEventMinSTFoilLineDxMomentumCut->Fill(eventMinSeparationMomentumCut.x());
+      hEventMinSTFoilLineDyMomentumCut->Fill(eventMinSeparationMomentumCut.y());
+      hEventMinSTFoilLineDzMomentumCut->Fill(eventMinSeparationMomentumCut.z());
+      hEventMinSTFoilLineRxyMomentumCut->Fill(
+        sqrt(eventMinSeparationMomentumCut.x() * eventMinSeparationMomentumCut.x() +
+             eventMinSeparationMomentumCut.y() * eventMinSeparationMomentumCut.y()));
+      hEventMinSTFoilDistanceMomentumCut->Fill(eventMinSTFoilDistanceMomentumCut);
+      hEventMinSTFoilDistanceVsElectronTimeDiffMomentumCut->Fill(
+        fabs(eventMinFirstTimeMomentumCut - eventMinSecondTimeMomentumCut),
+        eventMinSTFoilDistanceMomentumCut);
+      hEventMinSTFoilVertexXYMomentumCut->Fill(eventMinVertexMomentumCut.x(),
+                                               eventMinVertexMomentumCut.y());
+      hEventMinSTFoilVertexXZMomentumCut->Fill(eventMinVertexMomentumCut.x(),
+                                               eventMinVertexMomentumCut.z());
+      hEventMinSTFoilVertexYZMomentumCut->Fill(eventMinVertexMomentumCut.y(),
+                                               eventMinVertexMomentumCut.z());
+    }
+
+    // Keep the foil-line caches alive through this block so it is obvious
+    // they are intentionally gathered as part of the vertexing workflow.
+    // They are not consumed yet, but they define the exact data the next
+    // stage will use.
+    (void)firstTrackFoilLines;
+    (void)secondTrackFoilLines;
+
+    // Update the scan-wide min/max from the event-level minimum separation.
+    // That keeps the summary focused on the best ST-foil candidate per event.
+    if (eventMinSTFoilDistance < numeric_limits<double>::infinity())
+    {
+      ++eventsWithSharedSTFoils;
+      hEventMinSTFoilLineDx->Fill(eventMinSeparation.x());
+      hEventMinSTFoilLineDy->Fill(eventMinSeparation.y());
+      hEventMinSTFoilLineDz->Fill(eventMinSeparation.z());
+      hEventMinSTFoilLineRxy->Fill(
+        sqrt(eventMinSeparation.x() * eventMinSeparation.x() +
+             eventMinSeparation.y() * eventMinSeparation.y()));
+      hEventMinSTFoilDistance->Fill(eventMinSTFoilDistance);
+      hEventMinSTFoilDistanceVsElectronTimeDiff->Fill(
+        fabs(eventMinFirstTime - eventMinSecondTime),
+        eventMinSTFoilDistance);
+      hEventMinSTFoilVertexXY->Fill(eventMinVertex.x(), eventMinVertex.y());
+      hEventMinSTFoilVertexXZ->Fill(eventMinVertex.x(), eventMinVertex.z());
+      hEventMinSTFoilVertexYZ->Fill(eventMinVertex.y(), eventMinVertex.z());
+      if (eventMinSTFoilDistance < 1.0)
+      {
+        ++eventsWithMinDistanceUnder1mm;
+      }
+      if (eventMinSTFoilDistance < 0.5)
+      {
+        ++eventsWithMinDistanceUnder0p5mm;
+      }
+      if (eventMinSTFoilDistance < 0.1)
+      {
+        ++eventsWithMinDistanceUnder0p1mm;
+      }
+      if (eventMinSTFoilDistance < smallestEventMinSTFoilDistance)
+      {
+        smallestEventMinSTFoilDistance = eventMinSTFoilDistance;
+      }
+      if (eventMinSTFoilDistance > largestEventMinSTFoilDistance)
+      {
+        largestEventMinSTFoilDistance = eventMinSTFoilDistance;
+      }
+
+      if (doFullPrintout)
+      {
+        cout << "  event_smallest_shared_ST_Foils_line_distance="
+             << eventMinSTFoilDistance << " mm"
+             << " event_smallest_line_dx=" << eventMinSeparation.x() << " mm"
+             << " event_smallest_line_dy=" << eventMinSeparation.y() << " mm"
+             << " event_smallest_line_dz=" << eventMinSeparation.z() << " mm"
+             << " surface=" << formatSurfaceLabel(eventMinFoilSid, eventMinFoilSindex)
+             << endl;
       }
     }
   }
@@ -1088,6 +1279,27 @@ void twoElectronTrkSegVertexer(const string& inputName,
   cEventMinSTFoilDistanceVsElectronTimeDiff->SaveAs(
     "Plots/DistancePlots/twoElectronTrkSegVertexer_TEST_EventMinSTFoilDistanceVsElectronTimeDiff.pdf");
 
+  draw2DHistogram(
+    "cEventMinSTFoilVertexXY",
+    "Event-level closest shared ST_Foils midpoint vertex XY",
+    hEventMinSTFoilVertexXY,
+    kVertexXY,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_EventMinSTFoilVertexXY.pdf");
+
+  draw2DHistogram(
+    "cEventMinSTFoilVertexXZ",
+    "Event-level closest shared ST_Foils midpoint vertex XZ",
+    hEventMinSTFoilVertexXZ,
+    kVertexXZ,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_EventMinSTFoilVertexXZ.pdf");
+
+  draw2DHistogram(
+    "cEventMinSTFoilVertexYZ",
+    "Event-level closest shared ST_Foils midpoint vertex YZ",
+    hEventMinSTFoilVertexYZ,
+    kVertexYZ,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_EventMinSTFoilVertexYZ.pdf");
+
   TCanvas* cEventMinSTFoilDistanceMomentumCut = new TCanvas(
     "cEventMinSTFoilDistanceMomentumCut",
     "Momentum cut: event-level closest shared ST_Foils line distance",
@@ -1170,18 +1382,63 @@ void twoElectronTrkSegVertexer(const string& inputName,
   cEventMinSTFoilDistanceVsElectronTimeDiffMomentumCut->SaveAs(
     "Plots/DistancePlots/twoElectronTrkSegVertexer_TEST_MomentumCut_EventMinSTFoilDistanceVsElectronTimeDiff.pdf");
 
+  draw2DHistogram(
+    "cEventMinSTFoilVertexXYMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils midpoint vertex XY",
+    hEventMinSTFoilVertexXYMomentumCut,
+    kVertexXY,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_EventMinSTFoilVertexXY.pdf");
+
+  draw2DHistogram(
+    "cEventMinSTFoilVertexXZMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils midpoint vertex XZ",
+    hEventMinSTFoilVertexXZMomentumCut,
+    kVertexXZ,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_EventMinSTFoilVertexXZ.pdf");
+
+  draw2DHistogram(
+    "cEventMinSTFoilVertexYZMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils midpoint vertex YZ",
+    hEventMinSTFoilVertexYZMomentumCut,
+    kVertexYZ,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_EventMinSTFoilVertexYZ.pdf");
+
   // Final footer: keep this visible even in summary-only mode so the scan
   // result is still useful when the verbose printout is disabled.
   cout << "\nSummary" << endl;
-  cout << "  events printed: " << eventsPrinted << endl;
-  cout << "  shared surfaces printed: " << sharedSurfacesPrinted << endl;
-  cout << "  shared ST_Foils surfaces printed: " << sharedSTFoilsPrinted << endl;
+  cout << "  events processed: " << eventsPrinted << endl;
+  cout << "  shared surfaces processed: " << sharedSurfacesPrinted << endl;
+  cout << "  shared ST_Foils surfaces processed: " << sharedSTFoilsPrinted << endl;
   cout << "  events with at least one shared ST_Foils surface: "
        << eventsWithSharedSTFoils << endl;
   cout << "  events with at least one shared ST_Foils surface passing "
        << trackMomentumCutMin << "-" << trackMomentumCutMax
        << " MeV/c momentum cut: "
        << eventsWithSharedSTFoilsMomentumCut << endl;
+  const Long64_t eventsCutByMomentumRange =
+    eventsWithSharedSTFoils - eventsWithSharedSTFoilsMomentumCut;
+  cout << "  momentum cut range: "
+       << trackMomentumCutMin << "-" << trackMomentumCutMax
+       << " MeV/c" << endl;
+  cout << "  events cut by momentum range: "
+       << eventsCutByMomentumRange << endl;
+  cout << "  events remaining after momentum cut: "
+       << eventsWithSharedSTFoilsMomentumCut << endl;
+  if (eventsWithSharedSTFoils > 0)
+  {
+    cout << "  percent remaining after momentum cut among shared ST_Foils events: "
+         << 100.0 * static_cast<double>(eventsWithSharedSTFoilsMomentumCut) /
+              static_cast<double>(eventsWithSharedSTFoils)
+         << "%" << endl;
+  }
+  else
+  {
+    cout << "  percent remaining after momentum cut among shared ST_Foils events: undefined" << endl;
+  }
+  cout << "  percent of 100,000 remaining after momentum cut: "
+       << 100.0 * static_cast<double>(eventsWithSharedSTFoilsMomentumCut) /
+            momentumCutReferenceEventCount
+       << "%" << endl;
   cout << "  events by shared ST_Foils multiplicity:" << endl;
   if (eventsBySharedFoilMultiplicity.empty())
   {
@@ -1219,5 +1476,7 @@ void twoElectronTrkSegVertexer(const string& inputName,
     cout << "  smallest event-level ST_Foils line distance: undefined" << endl;
     cout << "  largest event-level ST_Foils line distance: undefined" << endl;
   }
+
+  gROOT->SetBatch(originalRootBatchMode);
 }
 

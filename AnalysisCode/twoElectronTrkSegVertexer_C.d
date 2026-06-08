@@ -59,6 +59,9 @@
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TBranchCacheInfo.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TBits.h
 ./twoElectronTrkSegVertexer_C.so: /usr/include/string.h
+./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TBox.h
+./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TAttBBox2D.h
+./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/GuiTypes.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TCanvas.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TPad.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TVirtualPad.h
@@ -67,10 +70,9 @@
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TVirtualQConnection.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TInterpreter.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TInterpreterValue.h
-./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/GuiTypes.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/Buttons.h
-./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TAttBBox2D.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TAttCanvas.h
+./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TEllipse.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TH1F.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TH1.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TAxis.h
@@ -88,6 +90,8 @@
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TH2.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TMatrixFBasefwd.h
 ./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TMatrixDBasefwd.h
+./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TMarker.h
+./twoElectronTrkSegVertexer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TROOT.h
 ./twoElectronTrkSegVertexer_C.so: /exp/mu2e/app/users/aboldy/workDir/EventNtuple/inc/EventInfo.hh
 ./twoElectronTrkSegVertexer_C.so: /exp/mu2e/app/users/aboldy/workDir/EventNtuple/inc/TrkSegInfo.hh
 ./twoElectronTrkSegVertexer_C.so: /exp/mu2e/app/users/aboldy/workDir/EventNtuple/inc/RootVectors.hh
