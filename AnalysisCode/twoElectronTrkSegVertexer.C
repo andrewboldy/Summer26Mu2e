@@ -50,6 +50,7 @@
 #include <TCanvas.h>
 #include <TH1F.h>
 #include <TH2F.h>
+#include <TVirtualPad.h>
 
 #include "EventNtuple/inc/EventInfo.hh"
 #include "EventNtuple/inc/TrkSegInfo.hh"
@@ -270,6 +271,53 @@ namespace
     result.distance = result.separation.R();
     result.valid = true;
     return result;
+  }
+
+  void drawHistogramPad(TCanvas* canvas, int padNumber, TH1F* histogram, bool useLogY)
+  {
+    TVirtualPad* pad = canvas->cd(padNumber);
+    if (pad != nullptr && useLogY)
+    {
+      pad->SetLogy();
+      if (histogram->GetMaximum() > 0.0)
+      {
+        histogram->SetMinimum(0.5);
+      }
+    }
+
+    histogram->SetLineWidth(2);
+    histogram->Draw("HIST");
+  }
+
+  void drawSeparationComponentCanvas(const string& canvasName,
+                                     const string& canvasTitle,
+                                     TH1F* hDx,
+                                     TH1F* hDy,
+                                     TH1F* hDz,
+                                     TH1F* hDistance,
+                                     bool useLogY,
+                                     const string& outputPath)
+  {
+    TCanvas* canvas = new TCanvas(canvasName.c_str(), canvasTitle.c_str(), 1200, 900);
+    canvas->Divide(2, 2);
+
+    drawHistogramPad(canvas, 1, hDx, useLogY);
+    drawHistogramPad(canvas, 2, hDy, useLogY);
+    drawHistogramPad(canvas, 3, hDz, useLogY);
+    drawHistogramPad(canvas, 4, hDistance, useLogY);
+
+    canvas->SaveAs(outputPath.c_str());
+  }
+
+  bool passesTrackMomentumCut(double firstTrackMomentum,
+                              double secondTrackMomentum,
+                              double cutMin,
+                              double cutMax)
+  {
+    return firstTrackMomentum >= cutMin &&
+           firstTrackMomentum <= cutMax &&
+           secondTrackMomentum >= cutMin &&
+           secondTrackMomentum <= cutMax;
   }
 }
 
@@ -509,12 +557,15 @@ void twoElectronTrkSegVertexer(const string& inputName,
   Long64_t sharedSTFoilsPrinted = 0;
   // Event-level ST-foil minima are what we summarize at the end of the scan.
   Long64_t eventsWithSharedSTFoils = 0;
+  Long64_t eventsWithSharedSTFoilsMomentumCut = 0;
   Long64_t eventsWithMinDistanceUnder1mm = 0;
   Long64_t eventsWithMinDistanceUnder0p5mm = 0;
   Long64_t eventsWithMinDistanceUnder0p1mm = 0;
   map<int, Long64_t> eventsBySharedFoilMultiplicity;
   double smallestEventMinSTFoilDistance = numeric_limits<double>::infinity();
   double largestEventMinSTFoilDistance = -numeric_limits<double>::infinity();
+  const double trackMomentumCutMin = 50.0;
+  const double trackMomentumCutMax = 54.0;
   TH1F* hEventMinSTFoilDistance = new TH1F(
     "hEventMinSTFoilDistance",
     "Event-level closest shared ST_Foils line distance;closest shared ST_Foils line distance [mm];Events",
@@ -562,6 +613,51 @@ void twoElectronTrkSegVertexer(const string& inputName,
   TH2F* hEventMinSTFoilDistanceVsElectronTimeDiff = new TH2F(
     "hEventMinSTFoilDistanceVsElectronTimeDiff_TEST",
     "TEST: event-level closest shared ST_Foils line distance vs absolute shared-foil track-segment time difference;|track-segment time 1 - track-segment time 2| [ns];closest shared ST_Foils line distance [mm]",
+    200, 0.0, 600.0,
+    200, 0.0, 20.0);
+  TH1F* hEventMinSTFoilDistanceMomentumCut = new TH1F(
+    "hEventMinSTFoilDistanceMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils line distance;closest shared ST_Foils line distance [mm];Events",
+    200, 0.0, 20.0);
+  TH1F* hAllSTFoilLineDistanceMomentumCut = new TH1F(
+    "hAllSTFoilLineDistanceMomentumCut",
+    "Momentum cut: all shared ST_Foils line distances;shared ST_Foils line distance [mm];Pairs",
+    200, 0.0, 20.0);
+  TH1F* hEventMinSTFoilLineDxMomentumCut = new TH1F(
+    "hEventMinSTFoilLineDxMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils line dx;line_dx [mm];Events",
+    200, -20.0, 20.0);
+  TH1F* hEventMinSTFoilLineDyMomentumCut = new TH1F(
+    "hEventMinSTFoilLineDyMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils line dy;line_dy [mm];Events",
+    200, -20.0, 20.0);
+  TH1F* hEventMinSTFoilLineDzMomentumCut = new TH1F(
+    "hEventMinSTFoilLineDzMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils line dz;line_dz [mm];Events",
+    200, -20.0, 20.0);
+  TH1F* hEventMinSTFoilLineRxyMomentumCut = new TH1F(
+    "hEventMinSTFoilLineRxyMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils transverse separation;#sqrt{line_dx^{2}+line_dy^{2}} [mm];Events",
+    200, 0.0, 20.0);
+  TH1F* hAllSTFoilLineDxMomentumCut = new TH1F(
+    "hAllSTFoilLineDxMomentumCut",
+    "Momentum cut: all shared ST_Foils line dx;line_dx [mm];Pairs",
+    200, -20.0, 20.0);
+  TH1F* hAllSTFoilLineDyMomentumCut = new TH1F(
+    "hAllSTFoilLineDyMomentumCut",
+    "Momentum cut: all shared ST_Foils line dy;line_dy [mm];Pairs",
+    200, -20.0, 20.0);
+  TH1F* hAllSTFoilLineDzMomentumCut = new TH1F(
+    "hAllSTFoilLineDzMomentumCut",
+    "Momentum cut: all shared ST_Foils line dz;line_dz [mm];Pairs",
+    200, -20.0, 20.0);
+  TH1F* hAllSTFoilLineRxyMomentumCut = new TH1F(
+    "hAllSTFoilLineRxyMomentumCut",
+    "Momentum cut: all shared ST_Foils transverse separation;#sqrt{line_dx^{2}+line_dy^{2}} [mm];Pairs",
+    200, 0.0, 20.0);
+  TH2F* hEventMinSTFoilDistanceVsElectronTimeDiffMomentumCut = new TH2F(
+    "hEventMinSTFoilDistanceVsElectronTimeDiffMomentumCut_TEST",
+    "TEST: Momentum cut: event-level closest shared ST_Foils line distance vs absolute shared-foil track-segment time difference;|track-segment time 1 - track-segment time 2| [ns];closest shared ST_Foils line distance [mm]",
     200, 0.0, 600.0,
     200, 0.0, 20.0);
 
@@ -686,6 +782,10 @@ void twoElectronTrkSegVertexer(const string& inputName,
       int eventMinFoilSid = -1;
       double eventMinFirstTime = numeric_limits<double>::quiet_NaN();
       double eventMinSecondTime = numeric_limits<double>::quiet_NaN();
+      double eventMinSTFoilDistanceMomentumCut = numeric_limits<double>::infinity();
+      XYZVectorF eventMinSeparationMomentumCut = XYZVectorF();
+      double eventMinFirstTimeMomentumCut = numeric_limits<double>::quiet_NaN();
+      double eventMinSecondTimeMomentumCut = numeric_limits<double>::quiet_NaN();
 
       for (size_t iOrder = 0; iOrder < orderedSharedSurfaces.size(); ++iOrder)
       {
@@ -722,6 +822,11 @@ void twoElectronTrkSegVertexer(const string& inputName,
           const double secondMomMag = sqrt(secondMomX * secondMomX +
                                            secondMomY * secondMomY +
                                            secondMomZ * secondMomZ);
+          const bool passesMomentumCut =
+            passesTrackMomentumCut(firstMomMag,
+                                   secondMomMag,
+                                   trackMomentumCutMin,
+                                   trackMomentumCutMax);
 
           // For shared foil surfaces, construct the 3D line objects from the
           // surface position and the unit momentum vector at that surface.
@@ -780,6 +885,24 @@ void twoElectronTrkSegVertexer(const string& inputName,
               sqrt(lineSeparation.separation.x() * lineSeparation.separation.x() +
                    lineSeparation.separation.y() * lineSeparation.separation.y()));
             hAllSTFoilLineDistance->Fill(lineSeparation.distance);
+            if (passesMomentumCut)
+            {
+              hAllSTFoilLineDxMomentumCut->Fill(lineSeparation.separation.x());
+              hAllSTFoilLineDyMomentumCut->Fill(lineSeparation.separation.y());
+              hAllSTFoilLineDzMomentumCut->Fill(lineSeparation.separation.z());
+              hAllSTFoilLineRxyMomentumCut->Fill(
+                sqrt(lineSeparation.separation.x() * lineSeparation.separation.x() +
+                     lineSeparation.separation.y() * lineSeparation.separation.y()));
+              hAllSTFoilLineDistanceMomentumCut->Fill(lineSeparation.distance);
+
+              if (lineSeparation.distance < eventMinSTFoilDistanceMomentumCut)
+              {
+                eventMinSTFoilDistanceMomentumCut = lineSeparation.distance;
+                eventMinSeparationMomentumCut = lineSeparation.separation;
+                eventMinFirstTimeMomentumCut = firstTime;
+                eventMinSecondTimeMomentumCut = secondTime;
+              }
+            }
 
             if (lineSeparation.distance < eventMinSTFoilDistance)
             {
@@ -805,6 +928,21 @@ void twoElectronTrkSegVertexer(const string& inputName,
           ++sharedSurfacesPrinted;
           ++sharedSTFoilsPrinted;
         }
+      }
+
+      if (eventMinSTFoilDistanceMomentumCut < numeric_limits<double>::infinity())
+      {
+        ++eventsWithSharedSTFoilsMomentumCut;
+        hEventMinSTFoilLineDxMomentumCut->Fill(eventMinSeparationMomentumCut.x());
+        hEventMinSTFoilLineDyMomentumCut->Fill(eventMinSeparationMomentumCut.y());
+        hEventMinSTFoilLineDzMomentumCut->Fill(eventMinSeparationMomentumCut.z());
+        hEventMinSTFoilLineRxyMomentumCut->Fill(
+          sqrt(eventMinSeparationMomentumCut.x() * eventMinSeparationMomentumCut.x() +
+               eventMinSeparationMomentumCut.y() * eventMinSeparationMomentumCut.y()));
+        hEventMinSTFoilDistanceMomentumCut->Fill(eventMinSTFoilDistanceMomentumCut);
+        hEventMinSTFoilDistanceVsElectronTimeDiffMomentumCut->Fill(
+          fabs(eventMinFirstTimeMomentumCut - eventMinSecondTimeMomentumCut),
+          eventMinSTFoilDistanceMomentumCut);
       }
 
       // Keep the foil-line caches alive through this block so it is obvious
@@ -886,30 +1024,6 @@ void twoElectronTrkSegVertexer(const string& inputName,
 
   // Exploratory component plots.  These are diagnostic additions to the scalar
   // separation study.
-  TCanvas* cEventMinSTFoilLineDx = new TCanvas(
-    "cEventMinSTFoilLineDx",
-    "Event-level closest shared ST_Foils line dx",
-    900, 700);
-  hEventMinSTFoilLineDx->Draw("HIST");
-  cEventMinSTFoilLineDx->SaveAs(
-    "Plots/DistancePlots/twoElectronTrkSegVertexer_EventMinSTFoilLineDx.pdf");
-
-  TCanvas* cEventMinSTFoilLineDy = new TCanvas(
-    "cEventMinSTFoilLineDy",
-    "Event-level closest shared ST_Foils line dy",
-    900, 700);
-  hEventMinSTFoilLineDy->Draw("HIST");
-  cEventMinSTFoilLineDy->SaveAs(
-    "Plots/DistancePlots/twoElectronTrkSegVertexer_EventMinSTFoilLineDy.pdf");
-
-  TCanvas* cEventMinSTFoilLineDz = new TCanvas(
-    "cEventMinSTFoilLineDz",
-    "Event-level closest shared ST_Foils line dz",
-    900, 700);
-  hEventMinSTFoilLineDz->Draw("HIST");
-  cEventMinSTFoilLineDz->SaveAs(
-    "Plots/DistancePlots/twoElectronTrkSegVertexer_EventMinSTFoilLineDz.pdf");
-
   TCanvas* cEventMinSTFoilLineRxy = new TCanvas(
     "cEventMinSTFoilLineRxy",
     "Event-level closest shared ST_Foils transverse separation",
@@ -918,29 +1032,25 @@ void twoElectronTrkSegVertexer(const string& inputName,
   cEventMinSTFoilLineRxy->SaveAs(
     "Plots/DistancePlots/twoElectronTrkSegVertexer_EventMinSTFoilLineRxy.pdf");
 
-  TCanvas* cAllSTFoilLineDx = new TCanvas(
-    "cAllSTFoilLineDx",
-    "All shared ST_Foils line dx",
-    900, 700);
-  hAllSTFoilLineDx->Draw("HIST");
-  cAllSTFoilLineDx->SaveAs(
-    "Plots/DistancePlots/twoElectronTrkSegVertexer_AllSTFoilLineDx.pdf");
+  drawSeparationComponentCanvas(
+    "cEventMinSTFoilSeparationComponents",
+    "Event-level closest shared ST_Foils line separation components",
+    hEventMinSTFoilLineDx,
+    hEventMinSTFoilLineDy,
+    hEventMinSTFoilLineDz,
+    hEventMinSTFoilDistance,
+    false,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_EventMinSTFoilSeparationComponents.pdf");
 
-  TCanvas* cAllSTFoilLineDy = new TCanvas(
-    "cAllSTFoilLineDy",
-    "All shared ST_Foils line dy",
-    900, 700);
-  hAllSTFoilLineDy->Draw("HIST");
-  cAllSTFoilLineDy->SaveAs(
-    "Plots/DistancePlots/twoElectronTrkSegVertexer_AllSTFoilLineDy.pdf");
-
-  TCanvas* cAllSTFoilLineDz = new TCanvas(
-    "cAllSTFoilLineDz",
-    "All shared ST_Foils line dz",
-    900, 700);
-  hAllSTFoilLineDz->Draw("HIST");
-  cAllSTFoilLineDz->SaveAs(
-    "Plots/DistancePlots/twoElectronTrkSegVertexer_AllSTFoilLineDz.pdf");
+  drawSeparationComponentCanvas(
+    "cEventMinSTFoilSeparationComponentsLogY",
+    "Event-level closest shared ST_Foils line separation components (log-y)",
+    hEventMinSTFoilLineDx,
+    hEventMinSTFoilLineDy,
+    hEventMinSTFoilLineDz,
+    hEventMinSTFoilDistance,
+    true,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_EventMinSTFoilSeparationComponents_LogY.pdf");
 
   TCanvas* cAllSTFoilLineRxy = new TCanvas(
     "cAllSTFoilLineRxy",
@@ -950,6 +1060,26 @@ void twoElectronTrkSegVertexer(const string& inputName,
   cAllSTFoilLineRxy->SaveAs(
     "Plots/DistancePlots/twoElectronTrkSegVertexer_AllSTFoilLineRxy.pdf");
 
+  drawSeparationComponentCanvas(
+    "cAllSTFoilLineSeparationComponents",
+    "All shared ST_Foils line separation components",
+    hAllSTFoilLineDx,
+    hAllSTFoilLineDy,
+    hAllSTFoilLineDz,
+    hAllSTFoilLineDistance,
+    false,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_AllSTFoilLineSeparationComponents.pdf");
+
+  drawSeparationComponentCanvas(
+    "cAllSTFoilLineSeparationComponentsLogY",
+    "All shared ST_Foils line separation components (log-y)",
+    hAllSTFoilLineDx,
+    hAllSTFoilLineDy,
+    hAllSTFoilLineDz,
+    hAllSTFoilLineDistance,
+    true,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_AllSTFoilLineSeparationComponents_LogY.pdf");
+
   TCanvas* cEventMinSTFoilDistanceVsElectronTimeDiff = new TCanvas(
     "cEventMinSTFoilDistanceVsElectronTimeDiff",
     "TEST: event-level closest shared ST_Foils line distance vs absolute shared-foil track-segment time difference",
@@ -957,6 +1087,88 @@ void twoElectronTrkSegVertexer(const string& inputName,
   hEventMinSTFoilDistanceVsElectronTimeDiff->Draw("COLZ");
   cEventMinSTFoilDistanceVsElectronTimeDiff->SaveAs(
     "Plots/DistancePlots/twoElectronTrkSegVertexer_TEST_EventMinSTFoilDistanceVsElectronTimeDiff.pdf");
+
+  TCanvas* cEventMinSTFoilDistanceMomentumCut = new TCanvas(
+    "cEventMinSTFoilDistanceMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils line distance",
+    900, 700);
+  hEventMinSTFoilDistanceMomentumCut->SetLineWidth(2);
+  hEventMinSTFoilDistanceMomentumCut->Draw("HIST");
+  cEventMinSTFoilDistanceMomentumCut->SaveAs(
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_EventMinSTFoilDistance.pdf");
+
+  TCanvas* cAllSTFoilLineDistanceMomentumCut = new TCanvas(
+    "cAllSTFoilLineDistanceMomentumCut",
+    "Momentum cut: all shared ST_Foils line distances",
+    900, 700);
+  hAllSTFoilLineDistanceMomentumCut->SetLineWidth(2);
+  hAllSTFoilLineDistanceMomentumCut->Draw("HIST");
+  cAllSTFoilLineDistanceMomentumCut->SaveAs(
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_AllSTFoilLineDistance.pdf");
+
+  TCanvas* cEventMinSTFoilLineRxyMomentumCut = new TCanvas(
+    "cEventMinSTFoilLineRxyMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils transverse separation",
+    900, 700);
+  hEventMinSTFoilLineRxyMomentumCut->Draw("HIST");
+  cEventMinSTFoilLineRxyMomentumCut->SaveAs(
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_EventMinSTFoilLineRxy.pdf");
+
+  drawSeparationComponentCanvas(
+    "cEventMinSTFoilSeparationComponentsMomentumCut",
+    "Momentum cut: event-level closest shared ST_Foils line separation components",
+    hEventMinSTFoilLineDxMomentumCut,
+    hEventMinSTFoilLineDyMomentumCut,
+    hEventMinSTFoilLineDzMomentumCut,
+    hEventMinSTFoilDistanceMomentumCut,
+    false,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_EventMinSTFoilSeparationComponents.pdf");
+
+  drawSeparationComponentCanvas(
+    "cEventMinSTFoilSeparationComponentsMomentumCutLogY",
+    "Momentum cut: event-level closest shared ST_Foils line separation components (log-y)",
+    hEventMinSTFoilLineDxMomentumCut,
+    hEventMinSTFoilLineDyMomentumCut,
+    hEventMinSTFoilLineDzMomentumCut,
+    hEventMinSTFoilDistanceMomentumCut,
+    true,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_EventMinSTFoilSeparationComponents_LogY.pdf");
+
+  TCanvas* cAllSTFoilLineRxyMomentumCut = new TCanvas(
+    "cAllSTFoilLineRxyMomentumCut",
+    "Momentum cut: all shared ST_Foils transverse separation",
+    900, 700);
+  hAllSTFoilLineRxyMomentumCut->Draw("HIST");
+  cAllSTFoilLineRxyMomentumCut->SaveAs(
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_AllSTFoilLineRxy.pdf");
+
+  drawSeparationComponentCanvas(
+    "cAllSTFoilLineSeparationComponentsMomentumCut",
+    "Momentum cut: all shared ST_Foils line separation components",
+    hAllSTFoilLineDxMomentumCut,
+    hAllSTFoilLineDyMomentumCut,
+    hAllSTFoilLineDzMomentumCut,
+    hAllSTFoilLineDistanceMomentumCut,
+    false,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_AllSTFoilLineSeparationComponents.pdf");
+
+  drawSeparationComponentCanvas(
+    "cAllSTFoilLineSeparationComponentsMomentumCutLogY",
+    "Momentum cut: all shared ST_Foils line separation components (log-y)",
+    hAllSTFoilLineDxMomentumCut,
+    hAllSTFoilLineDyMomentumCut,
+    hAllSTFoilLineDzMomentumCut,
+    hAllSTFoilLineDistanceMomentumCut,
+    true,
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_MomentumCut_AllSTFoilLineSeparationComponents_LogY.pdf");
+
+  TCanvas* cEventMinSTFoilDistanceVsElectronTimeDiffMomentumCut = new TCanvas(
+    "cEventMinSTFoilDistanceVsElectronTimeDiffMomentumCut",
+    "TEST: Momentum cut: event-level closest shared ST_Foils line distance vs absolute shared-foil track-segment time difference",
+    900, 700);
+  hEventMinSTFoilDistanceVsElectronTimeDiffMomentumCut->Draw("COLZ");
+  cEventMinSTFoilDistanceVsElectronTimeDiffMomentumCut->SaveAs(
+    "Plots/DistancePlots/twoElectronTrkSegVertexer_TEST_MomentumCut_EventMinSTFoilDistanceVsElectronTimeDiff.pdf");
 
   // Final footer: keep this visible even in summary-only mode so the scan
   // result is still useful when the verbose printout is disabled.
@@ -966,6 +1178,10 @@ void twoElectronTrkSegVertexer(const string& inputName,
   cout << "  shared ST_Foils surfaces printed: " << sharedSTFoilsPrinted << endl;
   cout << "  events with at least one shared ST_Foils surface: "
        << eventsWithSharedSTFoils << endl;
+  cout << "  events with at least one shared ST_Foils surface passing "
+       << trackMomentumCutMin << "-" << trackMomentumCutMax
+       << " MeV/c momentum cut: "
+       << eventsWithSharedSTFoilsMomentumCut << endl;
   cout << "  events by shared ST_Foils multiplicity:" << endl;
   if (eventsBySharedFoilMultiplicity.empty())
   {
