@@ -36,7 +36,11 @@
 //       trk.pdg == 11
 //       have TT_Mid pz > 0
 //       have an associated trkcalohit
-//       have reconstructed momentum in 10-55 MeV/c
+//       have reconstructed momentum in 50-53 MeV/c
+//
+//   The selected reconstructed and truth momentum histograms are still drawn
+//   over 10-55 MeV/c.  That plotting range is intentionally wider than the
+//   selection cut.
 //
 //   Within those selected events, the reconstructed vertex is built from the
 //   shared ST_Foils surface pair with the smallest closest-line distance.  MC
@@ -86,16 +90,18 @@
 //
 // Optional examples:
 //   twoElectronTruthTrkSegVertexerComparer("filelist.txt", 25)
-//   twoElectronTruthTrkSegVertexerComparer("nts.root", -1, "trk", 10.0, 55.0)
-//   twoElectronTruthTrkSegVertexerComparer("nts.root", -1, "trk", 10.0, 55.0,
+//   twoElectronTruthTrkSegVertexerComparer("nts.root", -1, "trk", 50.0, 53.0)
+//   twoElectronTruthTrkSegVertexerComparer("nts.root", -1, "trk", 50.0, 53.0,
 //                                          11, true, 3)
 //
-//   The seventh argument is the required reconstructed-track PDG hypothesis.
+//   The fourth and fifth arguments are the reconstructed momentum selection cut.
+//
+//   The sixth argument is the required reconstructed-track PDG hypothesis.
 //   Use requiredRecoPdg = 0 to disable that requirement.
 //
-//   The eighth argument requires downstream TT_Mid pz > 0 when true.
+//   The seventh argument requires downstream TT_Mid pz > 0 when true.
 //
-//   The ninth argument limits how many `trkmcsim` entries are printed per
+//   The eighth argument limits how many `trkmcsim` entries are printed per
 //   reconstructed track.  Use -1 to print all.
 //
 //----------------------------------------------------------------------------------
@@ -140,7 +146,7 @@ namespace
   //
   //   static const bool DO_FULL_PRINT = false;
   //
-  static const bool DO_FULL_PRINT = true;
+  static const bool DO_FULL_PRINT = false;
 
   // This prints the comparison between the selected reconstructed vertex and
   // the representative rank-0 downstream-electron MC truth origin.
@@ -267,44 +273,47 @@ namespace
     const vector<mu2e::TrkSegInfo>& firstTrackSegments,
     const vector<mu2e::TrkSegInfo>& secondTrackSegments)
   {
-    map<pair<int, int>, size_t> firstSurfaceToSegmentIndex;
-    map<pair<int, int>, size_t> secondSurfaceToSegmentIndex;
+    // Keep every stored segment for a surface key.  A track can intersect the
+    // same ST_Foils sindex more than once, and the vertexer must be able to
+    // choose the smallest-distance pair among those repeated crossings.
+    map<pair<int, int>, vector<size_t>> firstSurfaceToSegmentIndices;
+    map<pair<int, int>, vector<size_t>> secondSurfaceToSegmentIndices;
 
     for (size_t iFirstSegment = 0; iFirstSegment < firstTrackSegments.size(); ++iFirstSegment)
     {
       const auto& firstSegment = firstTrackSegments.at(iFirstSegment);
       const auto key = make_pair(firstSegment.sid, firstSegment.sindex);
-      if (firstSurfaceToSegmentIndex.find(key) == firstSurfaceToSegmentIndex.end())
-      {
-        firstSurfaceToSegmentIndex.emplace(key, iFirstSegment);
-      }
+      firstSurfaceToSegmentIndices[key].push_back(iFirstSegment);
     }
 
     for (size_t iSecondSegment = 0; iSecondSegment < secondTrackSegments.size(); ++iSecondSegment)
     {
       const auto& secondSegment = secondTrackSegments.at(iSecondSegment);
       const auto key = make_pair(secondSegment.sid, secondSegment.sindex);
-      if (secondSurfaceToSegmentIndex.find(key) == secondSurfaceToSegmentIndex.end())
-      {
-        secondSurfaceToSegmentIndex.emplace(key, iSecondSegment);
-      }
+      secondSurfaceToSegmentIndices[key].push_back(iSecondSegment);
     }
 
     SharedSurfaceMatches sharedSurfaces;
-    for (const auto& firstEntry : firstSurfaceToSegmentIndex)
+    for (const auto& firstEntry : firstSurfaceToSegmentIndices)
     {
-      const auto secondIter = secondSurfaceToSegmentIndex.find(firstEntry.first);
-      if (secondIter == secondSurfaceToSegmentIndex.end())
+      const auto secondIter = secondSurfaceToSegmentIndices.find(firstEntry.first);
+      if (secondIter == secondSurfaceToSegmentIndices.end())
       {
         continue;
       }
 
-      SharedSurfaceMatch sharedSurface;
-      sharedSurface.sid = firstEntry.first.first;
-      sharedSurface.sindex = firstEntry.first.second;
-      sharedSurface.firstStoredSegmentIndex = firstEntry.second;
-      sharedSurface.secondStoredSegmentIndex = secondIter->second;
-      sharedSurfaces.push_back(sharedSurface);
+      for (const size_t firstSegmentIndex : firstEntry.second)
+      {
+        for (const size_t secondSegmentIndex : secondIter->second)
+        {
+          SharedSurfaceMatch sharedSurface;
+          sharedSurface.sid = firstEntry.first.first;
+          sharedSurface.sindex = firstEntry.first.second;
+          sharedSurface.firstStoredSegmentIndex = firstSegmentIndex;
+          sharedSurface.secondStoredSegmentIndex = secondSegmentIndex;
+          sharedSurfaces.push_back(sharedSurface);
+        }
+      }
     }
 
     return sharedSurfaces;
@@ -640,8 +649,8 @@ namespace
 void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
                                             int maxEvents = -1,
                                             const string& trackBranch = "trk",
-                                            double momentumMin = 10.0,
-                                            double momentumMax = 55.0,
+                                            double momentumCutMin = 50.0,
+                                            double momentumCutMax = 53.0,
                                             int requiredRecoPdg = 11,
                                             bool requireDownstream = true,
                                             int maxTruthPerTrack = -1,
@@ -739,7 +748,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
     cout << "Track-segment branch: " << segmentBranch << endl;
     cout << "Truth branch: " << simBranch << endl;
     cout << "Track-calo branch: " << (hasCaloBranch ? caloBranch : string("missing")) << endl;
-    cout << "Reco momentum window: [" << momentumMin << ", " << momentumMax << "] MeV/c" << endl;
+    cout << "Reco momentum selection cut: ["
+         << momentumCutMin << ", " << momentumCutMax << "] MeV/c" << endl;
     cout << "Required reco PDG: "
          << (requiredRecoPdg == 0 ? string("disabled") : to_string(requiredRecoPdg)) << endl;
     cout << "Require downstream TT_Mid pz > 0: "
@@ -799,8 +809,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
                           trackSegments,
                           trackCaloHits,
                           iTrack,
-                          momentumMin,
-                          momentumMax,
+                          momentumCutMin,
+                          momentumCutMax,
                           requiredRecoPdg,
                           requireDownstream);
 
@@ -830,7 +840,7 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
           cout << "unavailable";
         }
         cout << endl;
-        cout << "      reco momentum in [" << momentumMin << ", " << momentumMax
+        cout << "      reco momentum in [" << momentumCutMin << ", " << momentumCutMax
              << "] MeV/c: " << (decision.momentumPass ? "yes" : "no") << endl;
         cout << "      reco PDG requirement: " << (decision.pdgPass ? "pass" : "fail") << endl;
         cout << "      downstream requirement: "
@@ -894,8 +904,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
     //   - exactly two selected reconstructed tracks in the event
     //   - each selected track is a downstream electron by the reco selection
     //   - each selected track has an associated calo hit
-    //   - each selected track has reconstructed momentum in the 10-55 MeV/c
-    //     window configured above
+    //   - each selected track has reconstructed momentum in the 50-53 MeV/c
+    //     selection cut configured above
     //
     // Only after this event-level reco selection passes do we fill any truth,
     // reco-momentum, or vertex histogram.

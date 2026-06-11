@@ -33,7 +33,8 @@
 //   The caller is responsible for enforcing the event-level reconstruction
 //   selection before calling the fill functions.  In the current comparer that
 //   means exactly two reconstructed downstream electron tracks, each with an
-//   associated calorimeter hit and reconstructed momentum in 10-55 MeV/c.
+//   associated calorimeter hit and reconstructed momentum in 50-53 MeV/c.
+//   The momentum histogram range is intentionally wider: 10-55 MeV/c.
 //
 // Coordinate and unit conventions:
 //   - positions are in mm
@@ -68,8 +69,8 @@ namespace twoelectronhist
   struct HistogramConfig
   {
     int momentumBins = 140;
-    double momentumMin = 0.0;
-    double momentumMax = 140.0;
+    double momentumMin = 10.0;
+    double momentumMax = 55.0;
 
     int timeBins = 200;
     double timeMin = 0.0;
@@ -85,7 +86,7 @@ namespace twoelectronhist
 
     int vertexDistanceBins = 200;
     double vertexDistanceMin = 0.0;
-    double vertexDistanceMax = 500.0;
+    double vertexDistanceMax = 250.0;
   };
 
   struct HistogramBook
