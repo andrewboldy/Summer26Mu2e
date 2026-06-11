@@ -36,7 +36,7 @@
 //       trk.pdg == 11
 //       have TT_Mid pz > 0
 //       have an associated trkcalohit
-//       have reconstructed momentum in 50-53 MeV/c
+//       have reconstructed momentum in 10-55 MeV/c
 //
 //   Within those selected events, the reconstructed vertex is built from the
 //   shared ST_Foils surface pair with the smallest closest-line distance.  MC
@@ -86,8 +86,8 @@
 //
 // Optional examples:
 //   twoElectronTruthTrkSegVertexerComparer("filelist.txt", 25)
-//   twoElectronTruthTrkSegVertexerComparer("nts.root", -1, "trk", 50.0, 53.0)
-//   twoElectronTruthTrkSegVertexerComparer("nts.root", -1, "trk", 50.0, 53.0,
+//   twoElectronTruthTrkSegVertexerComparer("nts.root", -1, "trk", 10.0, 55.0)
+//   twoElectronTruthTrkSegVertexerComparer("nts.root", -1, "trk", 10.0, 55.0,
 //                                          11, true, 3)
 //
 //   The seventh argument is the required reconstructed-track PDG hypothesis.
@@ -640,8 +640,8 @@ namespace
 void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
                                             int maxEvents = -1,
                                             const string& trackBranch = "trk",
-                                            double momentumMin = 50.0,
-                                            double momentumMax = 53.0,
+                                            double momentumMin = 10.0,
+                                            double momentumMax = 55.0,
                                             int requiredRecoPdg = 11,
                                             bool requireDownstream = true,
                                             int maxTruthPerTrack = -1,
@@ -894,7 +894,7 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
     //   - exactly two selected reconstructed tracks in the event
     //   - each selected track is a downstream electron by the reco selection
     //   - each selected track has an associated calo hit
-    //   - each selected track has reconstructed momentum in the 50-53 MeV/c
+    //   - each selected track has reconstructed momentum in the 10-55 MeV/c
     //     window configured above
     //
     // Only after this event-level reco selection passes do we fill any truth,
@@ -928,7 +928,7 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
         if (truthOrigin != nullptr)
         {
           const XYZVectorF truthToReco = selectedPairVertex.vertex - truthOrigin->pos;
-          twoelectronhist::fillRecoVertexTruthResidual(histograms, truthToReco.z());
+      twoelectronhist::fillRecoVertexTruthResidual(histograms, truthToReco);
         }
       }
     }

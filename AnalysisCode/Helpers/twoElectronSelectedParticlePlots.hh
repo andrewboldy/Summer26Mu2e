@@ -172,10 +172,14 @@ namespace twoelectronplots
     TH2F* hRecoVertexYZ = get2DHistogram(*histogramFile, "hRecoTwoElectronVertexYZ");
     TH1F* hRecoVertexDistance = get1DHistogram(*histogramFile,
                                                 "hRecoTwoElectronVertexLineDistance");
+    TH1F* hRecoVertexTruthDeltaX = get1DHistogram(*histogramFile,
+                                                   "hRecoTruthVertexDeltaX");
+    TH1F* hRecoVertexTruthDeltaY = get1DHistogram(*histogramFile,
+                                                   "hRecoTruthVertexDeltaY");
     TH1F* hRecoVertexTruthDeltaZ = get1DHistogram(*histogramFile,
                                                    "hRecoTruthVertexDeltaZ");
-    TH1F* hRecoVertexTruthAbsDeltaZ = get1DHistogram(*histogramFile,
-                                                      "hRecoTruthVertexAbsDeltaZ");
+    TH1F* hRecoVertexTruthDistance = get1DHistogram(*histogramFile,
+                                                     "hRecoTruthVertexDistance");
 
     if (hMCTruthOriginT == nullptr || hMCTruthOriginX == nullptr ||
         hMCTruthOriginY == nullptr || hMCTruthOriginZ == nullptr ||
@@ -185,7 +189,8 @@ namespace twoelectronplots
         hRecoVertexY == nullptr || hRecoVertexZ == nullptr ||
         hRecoVertexXY == nullptr || hRecoVertexXZ == nullptr ||
         hRecoVertexYZ == nullptr || hRecoVertexDistance == nullptr ||
-        hRecoVertexTruthDeltaZ == nullptr || hRecoVertexTruthAbsDeltaZ == nullptr)
+        hRecoVertexTruthDeltaX == nullptr || hRecoVertexTruthDeltaY == nullptr ||
+        hRecoVertexTruthDeltaZ == nullptr || hRecoVertexTruthDistance == nullptr)
     {
       std::cerr << "ERROR: one or more expected histograms are missing from "
                 << histogramFileName << std::endl;
@@ -204,6 +209,10 @@ namespace twoelectronplots
     style1DHistogram(hRecoVertexY);
     style1DHistogram(hRecoVertexZ);
     style1DHistogram(hRecoVertexDistance);
+    style1DHistogram(hRecoVertexTruthDeltaX);
+    style1DHistogram(hRecoVertexTruthDeltaY);
+    style1DHistogram(hRecoVertexTruthDeltaZ);
+    style1DHistogram(hRecoVertexTruthDistance);
 
     TCanvas cTruthOrigin("cTruthOrigin",
                          "MC truth rank-0 downstream electron origin",
@@ -252,13 +261,15 @@ namespace twoelectronplots
     cRecoVertex.SaveAs((outputDirectory + "/RecoVertex_1D.pdf").c_str());
 
     TCanvas cRecoVertexResidual("cRecoVertexResidual",
-                                "Selected reconstructed minus truth vertex z difference",
-                                1200,
-                                500);
-    cRecoVertexResidual.Divide(2, 1);
-    cRecoVertexResidual.cd(1); hRecoVertexTruthDeltaZ->Draw("HIST E");
-    cRecoVertexResidual.cd(2); hRecoVertexTruthAbsDeltaZ->Draw("HIST E");
-    cRecoVertexResidual.SaveAs((outputDirectory + "/RecoVertexTruthResidualZ.pdf").c_str());
+                                "Selected reconstructed minus truth vertex residual",
+                                1600,
+                                800);
+    cRecoVertexResidual.Divide(2, 2);
+    cRecoVertexResidual.cd(1); hRecoVertexTruthDeltaX->Draw("HIST E");
+    cRecoVertexResidual.cd(2); hRecoVertexTruthDeltaY->Draw("HIST E");
+    cRecoVertexResidual.cd(3); hRecoVertexTruthDeltaZ->Draw("HIST E");
+    cRecoVertexResidual.cd(4); hRecoVertexTruthDistance->Draw("HIST E");
+    cRecoVertexResidual.SaveAs((outputDirectory + "/RecoVertexTruthResidualXYZ.pdf").c_str());
 
     TCanvas cRecoVertexMaps("cRecoVertexMaps",
                             "Selected reconstructed two-electron vertex maps",

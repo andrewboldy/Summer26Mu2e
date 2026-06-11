@@ -33,7 +33,7 @@
 //   The caller is responsible for enforcing the event-level reconstruction
 //   selection before calling the fill functions.  In the current comparer that
 //   means exactly two reconstructed downstream electron tracks, each with an
-//   associated calorimeter hit and reconstructed momentum in 50-53 MeV/c.
+//   associated calorimeter hit and reconstructed momentum in 10-55 MeV/c.
 //
 // Coordinate and unit conventions:
 //   - positions are in mm
@@ -110,8 +110,10 @@ namespace twoelectronhist
     TH2F* recoVertexXZ = nullptr;
     TH2F* recoVertexYZ = nullptr;
     TH1F* recoVertexLineDistance = nullptr;
+    TH1F* recoVertexTruthDeltaX = nullptr;
+    TH1F* recoVertexTruthDeltaY = nullptr;
     TH1F* recoVertexTruthDeltaZ = nullptr;
-    TH1F* recoVertexTruthAbsDeltaZ = nullptr;
+    TH1F* recoVertexTruthDistance = nullptr;
 
     Long64_t selectedEvents = 0;
     Long64_t mcTruthEntries = 0;
@@ -273,17 +275,29 @@ namespace twoelectronhist
              config.vertexDistanceBins,
              config.vertexDistanceMin,
              config.vertexDistanceMax);
+    book.recoVertexTruthDeltaX =
+      make1D("hRecoTruthVertexDeltaX",
+             "Selected two-track vertex minus truth origin x difference;#Delta x [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
+    book.recoVertexTruthDeltaY =
+      make1D("hRecoTruthVertexDeltaY",
+             "Selected two-track vertex minus truth origin y difference;#Delta y [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
     book.recoVertexTruthDeltaZ =
       make1D("hRecoTruthVertexDeltaZ",
              "Selected two-track vertex minus truth origin z difference;#Delta z [mm];entries",
              config.transverseBins,
              -1000.0,
              1000.0);
-    book.recoVertexTruthAbsDeltaZ =
-      make1D("hRecoTruthVertexAbsDeltaZ",
-             "Absolute selected two-track vertex minus truth origin z difference;|#Delta z| [mm];entries",
-             config.transverseBins,
-             0.0,
+    book.recoVertexTruthDistance =
+      make1D("hRecoTruthVertexDistance",
+             "Selected two-track vertex minus truth origin residual magnitude;|#Delta r| [mm];entries",
+             config.vertexDistanceBins,
+             config.vertexDistanceMin,
              1000.0);
 
     return book;
@@ -389,15 +403,17 @@ namespace twoelectronhist
     ++book.recoVertexEntries;
   }
 
-  inline void fillRecoVertexTruthResidual(HistogramBook& book, double deltaZ)
+  inline void fillRecoVertexTruthResidual(HistogramBook& book, const XYZVectorF& delta)
   {
-    if (!std::isfinite(deltaZ))
+    if (!std::isfinite(delta.x()) || !std::isfinite(delta.y()) || !std::isfinite(delta.z()))
     {
       return;
     }
 
-    book.recoVertexTruthDeltaZ->Fill(deltaZ);
-    book.recoVertexTruthAbsDeltaZ->Fill(std::fabs(deltaZ));
+    book.recoVertexTruthDeltaX->Fill(delta.x());
+    book.recoVertexTruthDeltaY->Fill(delta.y());
+    book.recoVertexTruthDeltaZ->Fill(delta.z());
+    book.recoVertexTruthDistance->Fill(delta.R());
     ++book.recoVertexTruthResidualEntries;
   }
 
@@ -436,8 +452,10 @@ namespace twoelectronhist
     writeOne(book.recoVertexXZ);
     writeOne(book.recoVertexYZ);
     writeOne(book.recoVertexLineDistance);
+    writeOne(book.recoVertexTruthDeltaX);
+    writeOne(book.recoVertexTruthDeltaY);
     writeOne(book.recoVertexTruthDeltaZ);
-    writeOne(book.recoVertexTruthAbsDeltaZ);
+    writeOne(book.recoVertexTruthDistance);
     outputFile->Close();
     delete outputFile;
     return true;
