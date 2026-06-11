@@ -39,7 +39,7 @@
 //       have reconstructed momentum in 50-53 MeV/c
 //
 //   The selected reconstructed and truth momentum histograms are still drawn
-//   over 10-55 MeV/c.  That plotting range is intentionally wider than the
+//   over 30-55 MeV/c.  That plotting range is intentionally wider than the
 //   selection cut.
 //
 //   Within those selected events, the reconstructed vertex is built from the
@@ -549,15 +549,22 @@ namespace
     return nullptr;
   }
 
+  enum class SharedSurfaceSelectionMetric
+  {
+    kMinDistance,
+    kMinAbsTimeDifference
+  };
+
   // Build the reconstructed vertex from shared ST_Foils only, and pick the
-  // shared foil with the smallest closest-line distance.
-  twoparticlevertexer::VertexResult buildVertexForSelectedTrackPair(
+  // shared foil with the minimum score under the requested metric.
+  twoparticlevertexer::VertexResult buildVertexForSelectedTrackPairByMetric(
     const vector<mu2e::TrkInfo>* tracks,
     const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
     size_t firstTrackIndex,
     size_t secondTrackIndex,
     const mu2e::TrkSegInfo*& firstSegment,
-    const mu2e::TrkSegInfo*& secondSegment)
+    const mu2e::TrkSegInfo*& secondSegment,
+    SharedSurfaceSelectionMetric metric)
   {
     twoparticlevertexer::VertexResult vertex;
     firstSegment = nullptr;
@@ -587,7 +594,7 @@ namespace
     bool sawSharedSTFoil = false;
     bool foundValidSharedSTFoil = false;
     twoparticlevertexer::VertexResult bestVertex;
-    double bestDistance = numeric_limits<double>::infinity();
+    double bestScore = numeric_limits<double>::infinity();
 
     for (const auto& sharedSurface : sharedSurfaces)
     {
@@ -621,9 +628,14 @@ namespace
       }
 
       foundValidSharedSTFoil = true;
-      if (candidateVertex.distance < bestDistance)
+      const double candidateScore =
+        metric == SharedSurfaceSelectionMetric::kMinDistance
+          ? candidateVertex.distance
+          : fabs(candidateVertex.deltaInputTime);
+
+      if (candidateScore < bestScore)
       {
-        bestDistance = candidateVertex.distance;
+        bestScore = candidateScore;
         bestVertex = candidateVertex;
         firstSegment = &firstSharedSegment;
         secondSegment = &secondSharedSegment;
@@ -643,6 +655,42 @@ namespace
     }
 
     return bestVertex;
+  }
+
+  twoparticlevertexer::VertexResult buildVertexForSelectedTrackPair(
+    const vector<mu2e::TrkInfo>* tracks,
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t firstTrackIndex,
+    size_t secondTrackIndex,
+    const mu2e::TrkSegInfo*& firstSegment,
+    const mu2e::TrkSegInfo*& secondSegment)
+  {
+    return buildVertexForSelectedTrackPairByMetric(
+      tracks,
+      trackSegments,
+      firstTrackIndex,
+      secondTrackIndex,
+      firstSegment,
+      secondSegment,
+      SharedSurfaceSelectionMetric::kMinDistance);
+  }
+
+  twoparticlevertexer::VertexResult buildVertexForSelectedTrackPairMinTimeDifference(
+    const vector<mu2e::TrkInfo>* tracks,
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t firstTrackIndex,
+    size_t secondTrackIndex,
+    const mu2e::TrkSegInfo*& firstSegment,
+    const mu2e::TrkSegInfo*& secondSegment)
+  {
+    return buildVertexForSelectedTrackPairByMetric(
+      tracks,
+      trackSegments,
+      firstTrackIndex,
+      secondTrackIndex,
+      firstSegment,
+      secondSegment,
+      SharedSurfaceSelectionMetric::kMinAbsTimeDifference);
   }
 }
 
@@ -876,13 +924,16 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
            << (candidateTrackDecisions.size() >= 2 ? "yes" : "no") << endl;
     }
 
-    // Build a vertex for the first two selected tracks when at least two pass.
-    // The printout uses this as a diagnostic preview.  The histogram fill below
+    // Build vertices for the first two selected tracks when at least two pass.
+    // The printout uses these as diagnostic previews.  The histogram fill below
     // is stricter and requires exactly two selected tracks in the event.
     bool vertexWasAttempted = false;
     const mu2e::TrkSegInfo* firstVertexSegment = nullptr;
     const mu2e::TrkSegInfo* secondVertexSegment = nullptr;
+    const mu2e::TrkSegInfo* firstTimeVertexSegment = nullptr;
+    const mu2e::TrkSegInfo* secondTimeVertexSegment = nullptr;
     twoparticlevertexer::VertexResult selectedPairVertex;
+    twoparticlevertexer::VertexResult timeSelectedPairVertex;
     size_t firstVertexTrackIndex = 0;
     size_t secondVertexTrackIndex = 0;
 
@@ -897,6 +948,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
                                         secondVertexTrackIndex,
                                         firstVertexSegment,
                                         secondVertexSegment);
+      timeSelectedPairVertex =
+        buildVertexForSelectedTrackPairMinTimeDifference(
+          tracks,
+          trackSegments,
+          firstVertexTrackIndex,
+          secondVertexTrackIndex,
+          firstTimeVertexSegment,
+          secondTimeVertexSegment);
       vertexWasAttempted = true;
     }
 
@@ -934,11 +993,21 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
       if (vertexWasAttempted && selectedPairVertex.valid)
       {
         twoelectronhist::fillRecoVertex(histograms, selectedPairVertex);
+        twoelectronhist::fillRecoVertexSelectedSegmentTimeDifference(
+          histograms,
+          selectedPairVertex);
+
+        if (timeSelectedPairVertex.valid)
+        {
+          twoelectronhist::fillRecoVertexMinTimeDifferenceTest(
+            histograms,
+            timeSelectedPairVertex);
+        }
 
         if (truthOrigin != nullptr)
         {
           const XYZVectorF truthToReco = selectedPairVertex.vertex - truthOrigin->pos;
-      twoelectronhist::fillRecoVertexTruthResidual(histograms, truthToReco);
+          twoelectronhist::fillRecoVertexTruthResidual(histograms, truthToReco);
         }
       }
     }
@@ -964,6 +1033,24 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
         else
         {
           cout << "    vertex unavailable: " << selectedPairVertex.failureReason << endl;
+        }
+
+        cout << "  twoParticleVertexer preview minimizing |delta_input_time| using selected tracks "
+             << firstVertexTrackIndex << " and " << secondVertexTrackIndex << ":" << endl;
+        if (timeSelectedPairVertex.valid)
+        {
+          cout << "    seed surfaces: first sid=" << firstTimeVertexSegment->sid
+               << " sindex=" << firstTimeVertexSegment->sindex
+               << ", second sid=" << secondTimeVertexSegment->sid
+               << " sindex=" << secondTimeVertexSegment->sindex << endl;
+          cout << "    vertex midpoint(x,y,z)=" << formatVector3(timeSelectedPairVertex.vertex)
+               << " closest-line distance=" << timeSelectedPairVertex.distance << " mm"
+               << " delta_input_time=" << timeSelectedPairVertex.deltaInputTime << " ns"
+               << endl;
+        }
+        else
+        {
+          cout << "    vertex unavailable: " << timeSelectedPairVertex.failureReason << endl;
         }
     }
 

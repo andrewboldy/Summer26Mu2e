@@ -180,6 +180,12 @@ namespace twoelectronplots
                                                    "hRecoTruthVertexDeltaZ");
     TH1F* hRecoVertexTruthDistance = get1DHistogram(*histogramFile,
                                                      "hRecoTruthVertexDistance");
+    TH1F* hRecoVertexSelectedSegmentDeltaTTest = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexSelectedSegmentDeltaT");
+    TH1F* hRecoVertexMinTimeDifferenceTest = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeDifference");
 
     if (hMCTruthOriginT == nullptr || hMCTruthOriginX == nullptr ||
         hMCTruthOriginY == nullptr || hMCTruthOriginZ == nullptr ||
@@ -190,7 +196,9 @@ namespace twoelectronplots
         hRecoVertexXY == nullptr || hRecoVertexXZ == nullptr ||
         hRecoVertexYZ == nullptr || hRecoVertexDistance == nullptr ||
         hRecoVertexTruthDeltaX == nullptr || hRecoVertexTruthDeltaY == nullptr ||
-        hRecoVertexTruthDeltaZ == nullptr || hRecoVertexTruthDistance == nullptr)
+        hRecoVertexTruthDeltaZ == nullptr || hRecoVertexTruthDistance == nullptr ||
+        hRecoVertexSelectedSegmentDeltaTTest == nullptr ||
+        hRecoVertexMinTimeDifferenceTest == nullptr)
     {
       std::cerr << "ERROR: one or more expected histograms are missing from "
                 << histogramFileName << std::endl;
@@ -213,6 +221,8 @@ namespace twoelectronplots
     style1DHistogram(hRecoVertexTruthDeltaY);
     style1DHistogram(hRecoVertexTruthDeltaZ);
     style1DHistogram(hRecoVertexTruthDistance);
+    style1DHistogram(hRecoVertexSelectedSegmentDeltaTTest);
+    style1DHistogram(hRecoVertexMinTimeDifferenceTest);
 
     TCanvas cTruthOrigin("cTruthOrigin",
                          "MC truth rank-0 downstream electron origin",
@@ -280,6 +290,22 @@ namespace twoelectronplots
     cRecoVertexMaps.cd(2); draw2DHistogram(hRecoVertexXZ); drawStoppingTargetBoxXZ();
     cRecoVertexMaps.cd(3); draw2DHistogram(hRecoVertexYZ); drawStoppingTargetBoxYZ();
     cRecoVertexMaps.SaveAs((outputDirectory + "/RecoVertex_2DMaps.pdf").c_str());
+
+    TCanvas cRecoVertexDeltaTTest("cRecoVertexDeltaTTest",
+                                  "Selected reconstructed two-electron segment time differences",
+                                  900,
+                                  700);
+    hRecoVertexSelectedSegmentDeltaTTest->Draw("HIST E");
+    cRecoVertexDeltaTTest.SaveAs(
+      (outputDirectory + "/RecoVertexSelectedSegmentDeltaT_TEST.pdf").c_str());
+
+    TCanvas cRecoVertexMinTimeDifferenceTest("cRecoVertexMinTimeDifferenceTest",
+                                             "Minimum-|#Delta t| shared ST_Foils pair time difference",
+                                             900,
+                                             700);
+    hRecoVertexMinTimeDifferenceTest->Draw("HIST E");
+    cRecoVertexMinTimeDifferenceTest.SaveAs(
+      (outputDirectory + "/RecoVertexMinTimeDifference_TEST.pdf").c_str());
 
     histogramFile->Close();
     delete histogramFile;

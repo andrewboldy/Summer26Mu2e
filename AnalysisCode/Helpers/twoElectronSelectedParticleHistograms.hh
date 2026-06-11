@@ -34,7 +34,7 @@
 //   selection before calling the fill functions.  In the current comparer that
 //   means exactly two reconstructed downstream electron tracks, each with an
 //   associated calorimeter hit and reconstructed momentum in 50-53 MeV/c.
-//   The momentum histogram range is intentionally wider: 10-55 MeV/c.
+//   The momentum histogram range is intentionally wider: 30-55 MeV/c.
 //
 // Coordinate and unit conventions:
 //   - positions are in mm
@@ -69,7 +69,7 @@ namespace twoelectronhist
   struct HistogramConfig
   {
     int momentumBins = 140;
-    double momentumMin = 10.0;
+    double momentumMin = 30.0;
     double momentumMax = 55.0;
 
     int timeBins = 200;
@@ -87,6 +87,10 @@ namespace twoelectronhist
     int vertexDistanceBins = 200;
     double vertexDistanceMin = 0.0;
     double vertexDistanceMax = 250.0;
+
+    int timeDifferenceBins = 200;
+    double timeDifferenceMin = -250.0;
+    double timeDifferenceMax = 250.0;
   };
 
   struct HistogramBook
@@ -111,6 +115,8 @@ namespace twoelectronhist
     TH2F* recoVertexXZ = nullptr;
     TH2F* recoVertexYZ = nullptr;
     TH1F* recoVertexLineDistance = nullptr;
+    TH1F* recoVertexSelectedSegmentDeltaTTest = nullptr;
+    TH1F* recoVertexMinTimeDifferenceTest = nullptr;
     TH1F* recoVertexTruthDeltaX = nullptr;
     TH1F* recoVertexTruthDeltaY = nullptr;
     TH1F* recoVertexTruthDeltaZ = nullptr;
@@ -120,6 +126,8 @@ namespace twoelectronhist
     Long64_t mcTruthEntries = 0;
     Long64_t recoMomentumEntries = 0;
     Long64_t recoVertexEntries = 0;
+    Long64_t recoVertexSelectedSegmentDeltaTEntries = 0;
+    Long64_t recoVertexMinTimeDifferenceEntries = 0;
     Long64_t recoVertexTruthResidualEntries = 0;
   };
 
@@ -276,6 +284,18 @@ namespace twoelectronhist
              config.vertexDistanceBins,
              config.vertexDistanceMin,
              config.vertexDistanceMax);
+    book.recoVertexSelectedSegmentDeltaTTest =
+      make1D("hTESTRecoTwoElectronVertexSelectedSegmentDeltaT",
+             "TEST: selected two-track segment time difference;#Delta t [ns];entries",
+             config.timeDifferenceBins,
+             config.timeDifferenceMin,
+             config.timeDifferenceMax);
+    book.recoVertexMinTimeDifferenceTest =
+      make1D("hTESTRecoTwoElectronVertexMinTimeDifference",
+             "TEST: minimum-|#Delta t| shared ST_Foils pair time difference;#Delta t [ns];entries",
+             config.timeDifferenceBins,
+             config.timeDifferenceMin,
+             config.timeDifferenceMax);
     book.recoVertexTruthDeltaX =
       make1D("hRecoTruthVertexDeltaX",
              "Selected two-track vertex minus truth origin x difference;#Delta x [mm];entries",
@@ -404,6 +424,32 @@ namespace twoelectronhist
     ++book.recoVertexEntries;
   }
 
+  inline void fillRecoVertexSelectedSegmentTimeDifference(
+    HistogramBook& book,
+    const twoparticlevertexer::VertexResult& vertex)
+  {
+    if (!vertex.valid)
+    {
+      return;
+    }
+
+    book.recoVertexSelectedSegmentDeltaTTest->Fill(vertex.deltaInputTime);
+    ++book.recoVertexSelectedSegmentDeltaTEntries;
+  }
+
+  inline void fillRecoVertexMinTimeDifferenceTest(
+    HistogramBook& book,
+    const twoparticlevertexer::VertexResult& vertex)
+  {
+    if (!vertex.valid)
+    {
+      return;
+    }
+
+    book.recoVertexMinTimeDifferenceTest->Fill(vertex.deltaInputTime);
+    ++book.recoVertexMinTimeDifferenceEntries;
+  }
+
   inline void fillRecoVertexTruthResidual(HistogramBook& book, const XYZVectorF& delta)
   {
     if (!std::isfinite(delta.x()) || !std::isfinite(delta.y()) || !std::isfinite(delta.z()))
@@ -453,6 +499,8 @@ namespace twoelectronhist
     writeOne(book.recoVertexXZ);
     writeOne(book.recoVertexYZ);
     writeOne(book.recoVertexLineDistance);
+    writeOne(book.recoVertexSelectedSegmentDeltaTTest);
+    writeOne(book.recoVertexMinTimeDifferenceTest);
     writeOne(book.recoVertexTruthDeltaX);
     writeOne(book.recoVertexTruthDeltaY);
     writeOne(book.recoVertexTruthDeltaZ);
