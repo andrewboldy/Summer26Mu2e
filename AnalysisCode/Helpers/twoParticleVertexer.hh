@@ -155,7 +155,7 @@ namespace twoparticlevertexer
 
   inline ParticleState makeParticleStateFromTrackSegment(const mu2e::TrkSegInfo& segment,
                                                          const int trackIndex = -1,
-                                                         const int pdg = 0,
+                                                         const int pdg = 11,
                                                          const std::string& label = "")
   {
     return makeParticleState(segment.pos,
@@ -166,6 +166,13 @@ namespace twoparticlevertexer
                              segment.sid,
                              segment.sindex,
                              label);
+  }
+
+  inline ParticleState makeParticleStateFromTrackSegment(const mu2e::TrkSegInfo& segment,
+                                                         const int trackIndex,
+                                                         const std::string& label)
+  {
+    return makeParticleStateFromTrackSegment(segment, trackIndex, 11, label);
   }
 
   inline Line3D makeLine(const ParticleState& state)

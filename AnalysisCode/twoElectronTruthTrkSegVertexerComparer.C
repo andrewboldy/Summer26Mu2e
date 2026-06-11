@@ -38,8 +38,10 @@
 //       have an associated trkcalohit
 //       have reconstructed momentum in 50-53 MeV/c
 //
-//   Within those selected events, MC truth histograms are filled only from
-//   trkmcsim particles that are rank 0 downstream electrons:
+//   Within those selected events, the reconstructed vertex is built from the
+//   shared ST_Foils surface pair with the smallest closest-line distance.  MC
+//   truth histograms are filled only from trkmcsim particles that are rank 0
+//   downstream electrons:
 //
 //       sim.valid
 //       sim.rank == 0
@@ -105,6 +107,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -248,6 +251,63 @@ namespace
     ostringstream out;
     out << "(" << vector.x() << ", " << vector.y() << ", " << vector.z() << ")";
     return out.str();
+  }
+
+  struct SharedSurfaceMatch
+  {
+    int sid = -1;
+    int sindex = -1;
+    size_t firstStoredSegmentIndex = 0;
+    size_t secondStoredSegmentIndex = 0;
+  };
+
+  using SharedSurfaceMatches = vector<SharedSurfaceMatch>;
+
+  SharedSurfaceMatches sharedSurfacesBetweenTracks(
+    const vector<mu2e::TrkSegInfo>& firstTrackSegments,
+    const vector<mu2e::TrkSegInfo>& secondTrackSegments)
+  {
+    map<pair<int, int>, size_t> firstSurfaceToSegmentIndex;
+    map<pair<int, int>, size_t> secondSurfaceToSegmentIndex;
+
+    for (size_t iFirstSegment = 0; iFirstSegment < firstTrackSegments.size(); ++iFirstSegment)
+    {
+      const auto& firstSegment = firstTrackSegments.at(iFirstSegment);
+      const auto key = make_pair(firstSegment.sid, firstSegment.sindex);
+      if (firstSurfaceToSegmentIndex.find(key) == firstSurfaceToSegmentIndex.end())
+      {
+        firstSurfaceToSegmentIndex.emplace(key, iFirstSegment);
+      }
+    }
+
+    for (size_t iSecondSegment = 0; iSecondSegment < secondTrackSegments.size(); ++iSecondSegment)
+    {
+      const auto& secondSegment = secondTrackSegments.at(iSecondSegment);
+      const auto key = make_pair(secondSegment.sid, secondSegment.sindex);
+      if (secondSurfaceToSegmentIndex.find(key) == secondSurfaceToSegmentIndex.end())
+      {
+        secondSurfaceToSegmentIndex.emplace(key, iSecondSegment);
+      }
+    }
+
+    SharedSurfaceMatches sharedSurfaces;
+    for (const auto& firstEntry : firstSurfaceToSegmentIndex)
+    {
+      const auto secondIter = secondSurfaceToSegmentIndex.find(firstEntry.first);
+      if (secondIter == secondSurfaceToSegmentIndex.end())
+      {
+        continue;
+      }
+
+      SharedSurfaceMatch sharedSurface;
+      sharedSurface.sid = firstEntry.first.first;
+      sharedSurface.sindex = firstEntry.first.second;
+      sharedSurface.firstStoredSegmentIndex = firstEntry.second;
+      sharedSurface.secondStoredSegmentIndex = secondIter->second;
+      sharedSurfaces.push_back(sharedSurface);
+    }
+
+    return sharedSurfaces;
   }
 
   //============================================================================
@@ -405,35 +465,6 @@ namespace
     return decision;
   }
 
-  // Choose the track segment that will seed the generic vertex helper.
-  //
-  // This is intentionally simple for the first comparer pass.  Later histogram
-  // versions can replace this choice with a shared-surface or best-surface
-  // policy without changing the twoParticleVertexer helper.
-  const mu2e::TrkSegInfo* chooseVertexSeedSegment(
-    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
-    size_t trackIndex)
-  {
-    if (trackSegments == nullptr || trackIndex >= trackSegments->size())
-    {
-      return nullptr;
-    }
-
-    const auto& segments = trackSegments->at(trackIndex);
-    const mu2e::TrkSegInfo* trackerMiddleSegment = findTrackerMiddleSegment(segments);
-    if (trackerMiddleSegment != nullptr)
-    {
-      return trackerMiddleSegment;
-    }
-
-    if (!segments.empty())
-    {
-      return &segments.front();
-    }
-
-    return nullptr;
-  }
-
   void printTruthForTrack(const vector<vector<mu2e::SimInfo>>* truthSimByTrack,
                           size_t trackIndex,
                           int maxTruthPerTrack)
@@ -509,6 +540,8 @@ namespace
     return nullptr;
   }
 
+  // Build the reconstructed vertex from shared ST_Foils only, and pick the
+  // shared foil with the smallest closest-line distance.
   twoparticlevertexer::VertexResult buildVertexForSelectedTrackPair(
     const vector<mu2e::TrkInfo>* tracks,
     const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
@@ -518,12 +551,14 @@ namespace
     const mu2e::TrkSegInfo*& secondSegment)
   {
     twoparticlevertexer::VertexResult vertex;
+    firstSegment = nullptr;
+    secondSegment = nullptr;
 
-    firstSegment = chooseVertexSeedSegment(trackSegments, firstTrackIndex);
-    secondSegment = chooseVertexSeedSegment(trackSegments, secondTrackIndex);
-    if (firstSegment == nullptr || secondSegment == nullptr)
+    if (trackSegments == nullptr ||
+        firstTrackIndex >= trackSegments->size() ||
+        secondTrackIndex >= trackSegments->size())
     {
-      vertex.failureReason = "missing trkseg seed";
+      vertex.failureReason = "missing track-segment data";
       return vertex;
     }
 
@@ -535,20 +570,70 @@ namespace
       return vertex;
     }
 
-    const auto firstState =
-      twoparticlevertexer::makeParticleStateFromTrackSegment(
-        *firstSegment,
-        static_cast<int>(firstTrackIndex),
-        tracks->at(firstTrackIndex).pdg,
-        "first selected reco track");
-    const auto secondState =
-      twoparticlevertexer::makeParticleStateFromTrackSegment(
-        *secondSegment,
-        static_cast<int>(secondTrackIndex),
-        tracks->at(secondTrackIndex).pdg,
-        "second selected reco track");
+    const auto& firstTrackSegments = trackSegments->at(firstTrackIndex);
+    const auto& secondTrackSegments = trackSegments->at(secondTrackIndex);
+    const SharedSurfaceMatches sharedSurfaces =
+      sharedSurfacesBetweenTracks(firstTrackSegments, secondTrackSegments);
 
-    return twoparticlevertexer::vertexFromParticleStates(firstState, secondState);
+    bool sawSharedSTFoil = false;
+    bool foundValidSharedSTFoil = false;
+    twoparticlevertexer::VertexResult bestVertex;
+    double bestDistance = numeric_limits<double>::infinity();
+
+    for (const auto& sharedSurface : sharedSurfaces)
+    {
+      if (sharedSurface.sid != mu2e::SurfaceIdDetail::ST_Foils)
+      {
+        continue;
+      }
+
+      sawSharedSTFoil = true;
+      const auto& firstSharedSegment =
+        firstTrackSegments.at(sharedSurface.firstStoredSegmentIndex);
+      const auto& secondSharedSegment =
+        secondTrackSegments.at(sharedSurface.secondStoredSegmentIndex);
+
+      const auto firstState =
+        twoparticlevertexer::makeParticleStateFromTrackSegment(
+          firstSharedSegment,
+          static_cast<int>(firstTrackIndex),
+          "first selected reco track");
+      const auto secondState =
+        twoparticlevertexer::makeParticleStateFromTrackSegment(
+          secondSharedSegment,
+          static_cast<int>(secondTrackIndex),
+          "second selected reco track");
+
+      const auto candidateVertex =
+        twoparticlevertexer::vertexFromParticleStates(firstState, secondState);
+      if (!candidateVertex.valid)
+      {
+        continue;
+      }
+
+      foundValidSharedSTFoil = true;
+      if (candidateVertex.distance < bestDistance)
+      {
+        bestDistance = candidateVertex.distance;
+        bestVertex = candidateVertex;
+        firstSegment = &firstSharedSegment;
+        secondSegment = &secondSharedSegment;
+      }
+    }
+
+    if (!sawSharedSTFoil)
+    {
+      vertex.failureReason = "no shared ST_Foils surface";
+      return vertex;
+    }
+
+    if (!foundValidSharedSTFoil)
+    {
+      vertex.failureReason = "shared ST_Foils lines are parallel or invalid";
+      return vertex;
+    }
+
+    return bestVertex;
   }
 }
 
