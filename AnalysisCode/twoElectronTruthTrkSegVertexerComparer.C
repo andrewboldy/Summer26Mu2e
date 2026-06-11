@@ -1,0 +1,962 @@
+//----------------------------------------------------------------------------------
+//
+// twoElectronTruthTrkSegVertexerComparer.C
+// Written by Andrew Boldy University of South Carolina, 2026
+// Assisted by Codex
+//
+// Purpose:
+//   Read an EventNtuple `nts.*.root` file directly and compare the first useful
+//   pieces of MC truth information against reconstructed track/calo information.
+//
+//   This macro is the new ntuple-based replacement for the art-module attempt.
+//   It does not call `mu2e`, does not use art::RootInput, and does not require
+//   an original art event file.  It reads the ROOT tree:
+//
+//       EventNtuple/ntuple
+//
+//   from an `nts.*.root` file or from a text filelist of such files.
+//
+// First diagnostic pass:
+//   For each scanned event, print:
+//     - event identity, when evtinfo is available
+//     - the MC truth `trkmcsim` origin for each stored truth particle:
+//         origin = (t, x, y, z)
+//     - whether reconstructed tracks exist in the requested track branch
+//     - whether each reconstructed track has an associated calorimeter object
+//     - whether each reconstructed momentum lies between 50 and 53 MeV/c
+//     - whether the event contains two reconstructed tracks with those same
+//       requested properties
+//
+// Histogram pass:
+//   The macro also writes a ROOT file containing the first comparison
+//   histograms.  Histogram entries are filled only for events with exactly two
+//   selected reconstructed downstream electron tracks.  In the default
+//   selection, each selected reconstructed track must:
+//
+//       trk.pdg == 11
+//       have TT_Mid pz > 0
+//       have an associated trkcalohit
+//       have reconstructed momentum in 50-53 MeV/c
+//
+//   Within those selected events, MC truth histograms are filled only from
+//   trkmcsim particles that are rank 0 downstream electrons:
+//
+//       sim.valid
+//       sim.rank == 0
+//       sim.pdg == 11
+//       sim.mom.z() > 0
+//
+//   The output file name is controlled by HISTOGRAM_OUTPUT_FILE near the top of
+//   the implementation.  The PDF plots are written under
+//   Plots/TruthVsRecoPlots/.
+//
+// Branch conventions:
+//   The default branch prefix is "trk", which uses:
+//
+//       trk        -> vector<mu2e::TrkInfo>
+//       trksegs    -> vector<vector<mu2e::TrkSegInfo>>
+//       trkmcsim   -> vector<vector<mu2e::SimInfo>>
+//       trkcalohit -> vector<mu2e::TrkCaloHitInfo>
+//
+//   If a different trackBranch is supplied, branch names are derived as:
+//
+//       <trackBranch>segs
+//       <trackBranch>mcsim
+//       <trackBranch>calohit
+//
+//   The derived names can be overridden by passing explicit simBranch and
+//   caloBranch values.
+//
+// Momentum convention for this first pass:
+//   The reconstructed momentum test uses the best diagnostic momentum available
+//   for each track:
+//
+//     1. trkcalohit[i].mom.R(), when an active calo association exists
+//     2. the reconstructed TT_Mid segment momentum, when present
+//     3. the first stored trkseg momentum, as a last diagnostic fallback
+//
+//   The printout labels which source was used.  This keeps the first pass
+//   robust across ntuples while making the choice explicit in the terminal log.
+//
+// Usage from ROOT:
+//   .L CreatedCode/HistogramMakers/twoElectronTruthTrkSegVertexerComparer.C+
+//   twoElectronTruthTrkSegVertexerComparer("path/to/nts.root")
+//
+// Optional examples:
+//   twoElectronTruthTrkSegVertexerComparer("filelist.txt", 25)
+//   twoElectronTruthTrkSegVertexerComparer("nts.root", -1, "trk", 50.0, 53.0)
+//   twoElectronTruthTrkSegVertexerComparer("nts.root", -1, "trk", 50.0, 53.0,
+//                                          11, true, 3)
+//
+//   The seventh argument is the required reconstructed-track PDG hypothesis.
+//   Use requiredRecoPdg = 0 to disable that requirement.
+//
+//   The eighth argument requires downstream TT_Mid pz > 0 when true.
+//
+//   The ninth argument limits how many `trkmcsim` entries are printed per
+//   reconstructed track.  Use -1 to print all.
+//
+//----------------------------------------------------------------------------------
+
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#include <TChain.h>
+
+#include "EventNtuple/inc/EventInfo.hh"
+#include "EventNtuple/inc/SimInfo.hh"
+#include "EventNtuple/inc/TrkCaloHitInfo.hh"
+#include "EventNtuple/inc/TrkInfo.hh"
+#include "EventNtuple/inc/TrkSegInfo.hh"
+#include "Helpers/twoElectronSelectedParticleHistograms.hh"
+#include "Helpers/twoElectronSelectedParticlePlots.hh"
+#include "Helpers/twoParticleVertexer.hh"
+
+using namespace std;
+
+namespace
+{
+  //============================================================================
+  // Manual Printout Switch
+  //============================================================================
+
+  // Set this to false by hand when you want the macro to scan the input and
+  // print only the final summary counters.  This avoids having to pass a long
+  // optional argument list from the ROOT command line while the macro is still
+  // in its first diagnostic-printout stage.
+  //
+  // Example manual edit:
+  //
+  //   static const bool DO_FULL_PRINT = false;
+  //
+  static const bool DO_FULL_PRINT = true;
+
+  // This prints the comparison between the selected reconstructed vertex and
+  // the representative rank-0 downstream-electron MC truth origin.
+  static const bool DO_VERTEX_ORIGIN_RESIDUAL_PRINT = true;
+
+  // Histogram output is controlled here for the same reason as DO_FULL_PRINT:
+  // the macro is still evolving, and editing one clearly named constant is less
+  // error-prone than passing a long positional argument list from ROOT.
+  static const bool WRITE_HISTOGRAM_FILE = true;
+  static const char* HISTOGRAM_OUTPUT_FILE =
+    "twoElectronTruthTrkSegVertexerComparer_histograms.root";
+  static const char* HISTOGRAM_PLOT_OUTPUT_DIR = "Plots/TruthVsRecoPlots";
+
+  //============================================================================
+  // Input Helpers
+  //============================================================================
+
+  bool hasRootSuffix(const string& path)
+  {
+    const string suffix = ".root";
+    if (path.size() < suffix.size())
+    {
+      return false;
+    }
+    return path.substr(path.size() - suffix.size()) == suffix;
+  }
+
+  void enableBranch(TChain& chain, const string& branchName)
+  {
+    // EventNtuple branches are usually split.  Enabling both the top-level
+    // branch and its split leaves avoids missing fields such as trk.pdg or
+    // trkcalohit.mom.fCoordinates.fX.
+    chain.SetBranchStatus(branchName.c_str(), 1);
+    chain.SetBranchStatus((branchName + ".*").c_str(), 1);
+  }
+
+  bool addInput(TChain& chain, const string& inputName)
+  {
+    if (hasRootSuffix(inputName))
+    {
+      chain.Add(inputName.c_str());
+      return true;
+    }
+
+    ifstream filelist(inputName);
+    if (!filelist.is_open())
+    {
+      cerr << "ERROR: could not open input file or filelist: " << inputName << endl;
+      return false;
+    }
+
+    string line;
+    int nFiles = 0;
+    while (getline(filelist, line))
+    {
+      if (line.empty() || line[0] == '#')
+      {
+        continue;
+      }
+
+      chain.Add(line.c_str());
+      ++nFiles;
+    }
+
+    if (nFiles == 0)
+    {
+      cerr << "ERROR: filelist contains no ROOT files: " << inputName << endl;
+      return false;
+    }
+
+    return true;
+  }
+
+  string deriveSegmentBranchName(const string& trackBranch)
+  {
+    return trackBranch + "segs";
+  }
+
+  string deriveSimBranchName(const string& trackBranch)
+  {
+    return trackBranch + "mcsim";
+  }
+
+  string deriveCaloBranchName(const string& trackBranch)
+  {
+    return trackBranch + "calohit";
+  }
+
+  string formatEventLabel(const mu2e::EventInfo* evtinfo, Long64_t entry)
+  {
+    ostringstream out;
+    if (evtinfo != nullptr)
+    {
+      out << "run=" << evtinfo->run
+          << " subrun=" << evtinfo->subrun
+          << " event=" << evtinfo->event
+          << " entry=" << entry;
+    }
+    else
+    {
+      out << "entry=" << entry;
+    }
+    return out.str();
+  }
+
+  string formatVector3(const XYZVectorF& vector)
+  {
+    ostringstream out;
+    out << "(" << vector.x() << ", " << vector.y() << ", " << vector.z() << ")";
+    return out.str();
+  }
+
+  //============================================================================
+  // Reconstruction Helpers
+  //============================================================================
+
+  struct MomentumChoice
+  {
+    bool valid = false;
+    double momentum = -1.0;
+    string source;
+  };
+
+  bool hasAssociatedCaloHit(const vector<mu2e::TrkCaloHitInfo>* trackCaloHits,
+                            size_t trackIndex)
+  {
+    if (trackCaloHits == nullptr || trackIndex >= trackCaloHits->size())
+    {
+      return false;
+    }
+
+    const auto& caloHit = trackCaloHits->at(trackIndex);
+    return caloHit.active && caloHit.did >= 0;
+  }
+
+  const mu2e::TrkSegInfo* findTrackerMiddleSegment(
+    const vector<mu2e::TrkSegInfo>& segments)
+  {
+    for (const auto& segment : segments)
+    {
+      if (segment.sid == mu2e::SurfaceIdDetail::TT_Mid)
+      {
+        return &segment;
+      }
+    }
+    return nullptr;
+  }
+
+  bool hasDownstreamTrackerMiddleSegment(const vector<mu2e::TrkSegInfo>& segments)
+  {
+    const mu2e::TrkSegInfo* trackerMiddleSegment = findTrackerMiddleSegment(segments);
+    return trackerMiddleSegment != nullptr && trackerMiddleSegment->mom.z() > 0.0;
+  }
+
+  bool isRankZeroDownstreamElectron(const mu2e::SimInfo& sim, int electronPdg = 11)
+  {
+    return sim.valid &&
+           sim.rank == 0 &&
+           sim.pdg == electronPdg &&
+           sim.mom.z() > 0.0;
+  }
+
+  MomentumChoice chooseRecoMomentum(const vector<mu2e::TrkCaloHitInfo>* trackCaloHits,
+                                    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+                                    size_t trackIndex)
+  {
+    MomentumChoice choice;
+
+    // Prefer the momentum at the track-calo point of closest approach when a
+    // usable track-calo association exists.  This ties the momentum cut directly
+    // to the same reconstructed object used by the "has calo" decision.
+    if (hasAssociatedCaloHit(trackCaloHits, trackIndex))
+    {
+      const auto& caloHit = trackCaloHits->at(trackIndex);
+      const double caloMomentum = caloHit.mom.R();
+      if (caloMomentum > 0.0)
+      {
+        choice.valid = true;
+        choice.momentum = caloMomentum;
+        choice.source = "trkcalohit.mom";
+        return choice;
+      }
+    }
+
+    if (trackSegments == nullptr || trackIndex >= trackSegments->size())
+    {
+      return choice;
+    }
+
+    const auto& segments = trackSegments->at(trackIndex);
+    const mu2e::TrkSegInfo* trackerMiddleSegment = findTrackerMiddleSegment(segments);
+    if (trackerMiddleSegment != nullptr && trackerMiddleSegment->mom.R() > 0.0)
+    {
+      choice.valid = true;
+      choice.momentum = trackerMiddleSegment->mom.R();
+      choice.source = "trksegs TT_Mid mom";
+      return choice;
+    }
+
+    if (!segments.empty() && segments.front().mom.R() > 0.0)
+    {
+      choice.valid = true;
+      choice.momentum = segments.front().mom.R();
+      choice.source = "first trkseg mom";
+    }
+
+    return choice;
+  }
+
+  bool momentumInWindow(const MomentumChoice& choice,
+                        double momentumMin,
+                        double momentumMax)
+  {
+    return choice.valid &&
+           choice.momentum >= momentumMin &&
+           choice.momentum <= momentumMax;
+  }
+
+  struct RecoTrackDecision
+  {
+    size_t trackIndex = 0;
+    bool pdgPass = true;
+    bool downstreamPass = true;
+    bool hasCalo = false;
+    bool momentumPass = false;
+    bool candidatePass = false;
+    MomentumChoice momentum;
+  };
+
+  RecoTrackDecision evaluateRecoTrack(
+    const vector<mu2e::TrkInfo>* tracks,
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    const vector<mu2e::TrkCaloHitInfo>* trackCaloHits,
+    size_t trackIndex,
+    double momentumMin,
+    double momentumMax,
+    int requiredRecoPdg,
+    bool requireDownstream)
+  {
+    RecoTrackDecision decision;
+    decision.trackIndex = trackIndex;
+
+    if (tracks != nullptr && trackIndex < tracks->size() && requiredRecoPdg != 0)
+    {
+      decision.pdgPass = tracks->at(trackIndex).pdg == requiredRecoPdg;
+    }
+
+    if (requireDownstream)
+    {
+      decision.downstreamPass =
+        trackSegments != nullptr &&
+        trackIndex < trackSegments->size() &&
+        hasDownstreamTrackerMiddleSegment(trackSegments->at(trackIndex));
+    }
+
+    decision.hasCalo = hasAssociatedCaloHit(trackCaloHits, trackIndex);
+    decision.momentum = chooseRecoMomentum(trackCaloHits, trackSegments, trackIndex);
+    decision.momentumPass = momentumInWindow(decision.momentum, momentumMin, momentumMax);
+    decision.candidatePass =
+      decision.pdgPass &&
+      decision.downstreamPass &&
+      decision.hasCalo &&
+      decision.momentumPass;
+
+    return decision;
+  }
+
+  // Choose the track segment that will seed the generic vertex helper.
+  //
+  // This is intentionally simple for the first comparer pass.  Later histogram
+  // versions can replace this choice with a shared-surface or best-surface
+  // policy without changing the twoParticleVertexer helper.
+  const mu2e::TrkSegInfo* chooseVertexSeedSegment(
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t trackIndex)
+  {
+    if (trackSegments == nullptr || trackIndex >= trackSegments->size())
+    {
+      return nullptr;
+    }
+
+    const auto& segments = trackSegments->at(trackIndex);
+    const mu2e::TrkSegInfo* trackerMiddleSegment = findTrackerMiddleSegment(segments);
+    if (trackerMiddleSegment != nullptr)
+    {
+      return trackerMiddleSegment;
+    }
+
+    if (!segments.empty())
+    {
+      return &segments.front();
+    }
+
+    return nullptr;
+  }
+
+  void printTruthForTrack(const vector<vector<mu2e::SimInfo>>* truthSimByTrack,
+                          size_t trackIndex,
+                          int maxTruthPerTrack)
+  {
+    if (truthSimByTrack == nullptr || trackIndex >= truthSimByTrack->size())
+    {
+      cout << "      truth trkmcsim: unavailable for this track index" << endl;
+      return;
+    }
+
+    const auto& truthSims = truthSimByTrack->at(trackIndex);
+    cout << "      truth trkmcsim entries: " << truthSims.size() << endl;
+
+    const size_t nToPrint =
+      maxTruthPerTrack < 0
+        ? truthSims.size()
+        : min(truthSims.size(), static_cast<size_t>(maxTruthPerTrack));
+
+    for (size_t iTruth = 0; iTruth < nToPrint; ++iTruth)
+    {
+      const auto& sim = truthSims.at(iTruth);
+      cout << "        truth[" << iTruth << "]"
+           << " valid=" << sim.valid
+           << " rank=" << sim.rank
+           << " id=" << sim.id
+           << " pdg=" << sim.pdg
+           << " nhits=" << sim.nhits
+           << " nactive=" << sim.nactive
+           << " origin(t,x,y,z)=("
+           << sim.time << ", "
+           << sim.pos.x() << ", "
+           << sim.pos.y() << ", "
+           << sim.pos.z() << ")"
+           << " origin_mom=" << formatVector3(sim.mom)
+           << endl;
+    }
+
+    if (nToPrint < truthSims.size())
+    {
+      cout << "        ... " << (truthSims.size() - nToPrint)
+           << " additional trkmcsim entries suppressed by maxTruthPerTrack"
+           << endl;
+    }
+  }
+
+  const mu2e::SimInfo* findRepresentativeTruthOrigin(
+    const vector<vector<mu2e::SimInfo>>* truthSimByTrack,
+    const vector<size_t>& selectedTrackIndices,
+    int electronPdg = 11)
+  {
+    if (truthSimByTrack == nullptr)
+    {
+      return nullptr;
+    }
+
+    for (const size_t trackIndex : selectedTrackIndices)
+    {
+      if (trackIndex >= truthSimByTrack->size())
+      {
+        continue;
+      }
+
+      const auto& truthSims = truthSimByTrack->at(trackIndex);
+      for (const auto& sim : truthSims)
+      {
+        if (isRankZeroDownstreamElectron(sim, electronPdg))
+        {
+          return &sim;
+        }
+      }
+    }
+
+    return nullptr;
+  }
+
+  twoparticlevertexer::VertexResult buildVertexForSelectedTrackPair(
+    const vector<mu2e::TrkInfo>* tracks,
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t firstTrackIndex,
+    size_t secondTrackIndex,
+    const mu2e::TrkSegInfo*& firstSegment,
+    const mu2e::TrkSegInfo*& secondSegment)
+  {
+    twoparticlevertexer::VertexResult vertex;
+
+    firstSegment = chooseVertexSeedSegment(trackSegments, firstTrackIndex);
+    secondSegment = chooseVertexSeedSegment(trackSegments, secondTrackIndex);
+    if (firstSegment == nullptr || secondSegment == nullptr)
+    {
+      vertex.failureReason = "missing trkseg seed";
+      return vertex;
+    }
+
+    if (tracks == nullptr ||
+        firstTrackIndex >= tracks->size() ||
+        secondTrackIndex >= tracks->size())
+    {
+      vertex.failureReason = "missing reconstructed track summary";
+      return vertex;
+    }
+
+    const auto firstState =
+      twoparticlevertexer::makeParticleStateFromTrackSegment(
+        *firstSegment,
+        static_cast<int>(firstTrackIndex),
+        tracks->at(firstTrackIndex).pdg,
+        "first selected reco track");
+    const auto secondState =
+      twoparticlevertexer::makeParticleStateFromTrackSegment(
+        *secondSegment,
+        static_cast<int>(secondTrackIndex),
+        tracks->at(secondTrackIndex).pdg,
+        "second selected reco track");
+
+    return twoparticlevertexer::vertexFromParticleStates(firstState, secondState);
+  }
+}
+
+void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
+                                            int maxEvents = -1,
+                                            const string& trackBranch = "trk",
+                                            double momentumMin = 50.0,
+                                            double momentumMax = 53.0,
+                                            int requiredRecoPdg = 11,
+                                            bool requireDownstream = true,
+                                            int maxTruthPerTrack = -1,
+                                            const string& explicitSimBranch = "",
+                                            const string& explicitCaloBranch = "")
+{
+  //============================================================================
+  // Main Macro Setup
+  //============================================================================
+
+  const string segmentBranch = deriveSegmentBranchName(trackBranch);
+  const string simBranch =
+    explicitSimBranch.empty() ? deriveSimBranchName(trackBranch) : explicitSimBranch;
+  const string caloBranch =
+    explicitCaloBranch.empty() ? deriveCaloBranchName(trackBranch) : explicitCaloBranch;
+
+  TChain ntuple("EventNtuple/ntuple");
+  if (!addInput(ntuple, inputName))
+  {
+    return;
+  }
+
+  const Long64_t nEntries = ntuple.GetEntries();
+  if (nEntries <= 0)
+  {
+    cerr << "ERROR: no entries found in EventNtuple/ntuple for input: "
+         << inputName << endl;
+    return;
+  }
+
+  if (ntuple.GetBranch(trackBranch.c_str()) == nullptr)
+  {
+    cerr << "ERROR: missing requested reconstructed track branch '"
+         << trackBranch << "'." << endl;
+    return;
+  }
+
+  if (ntuple.GetBranch(segmentBranch.c_str()) == nullptr)
+  {
+    cerr << "ERROR: missing requested reconstructed track-segment branch '"
+         << segmentBranch << "'." << endl;
+    return;
+  }
+
+  if (ntuple.GetBranch(simBranch.c_str()) == nullptr)
+  {
+    cerr << "ERROR: missing requested truth branch '" << simBranch << "'." << endl;
+    return;
+  }
+
+  const bool hasCaloBranch = ntuple.GetBranch(caloBranch.c_str()) != nullptr;
+  if (!hasCaloBranch)
+  {
+    cout << "WARNING: missing requested track-calo branch '" << caloBranch
+         << "'. Reco-calo decisions will be false." << endl;
+  }
+
+  ntuple.SetBranchStatus("*", 0);
+  enableBranch(ntuple, "evtinfo");
+  enableBranch(ntuple, trackBranch);
+  enableBranch(ntuple, segmentBranch);
+  enableBranch(ntuple, simBranch);
+  if (hasCaloBranch)
+  {
+    enableBranch(ntuple, caloBranch);
+  }
+
+  mu2e::EventInfo* evtinfo = nullptr;
+  vector<mu2e::TrkInfo>* tracks = nullptr;
+  vector<vector<mu2e::TrkSegInfo>>* trackSegments = nullptr;
+  vector<vector<mu2e::SimInfo>>* truthSimByTrack = nullptr;
+  vector<mu2e::TrkCaloHitInfo>* trackCaloHits = nullptr;
+
+  if (ntuple.GetBranch("evtinfo") != nullptr)
+  {
+    ntuple.SetBranchAddress("evtinfo", &evtinfo);
+  }
+  ntuple.SetBranchAddress(trackBranch.c_str(), &tracks);
+  ntuple.SetBranchAddress(segmentBranch.c_str(), &trackSegments);
+  ntuple.SetBranchAddress(simBranch.c_str(), &truthSimByTrack);
+  if (hasCaloBranch)
+  {
+    ntuple.SetBranchAddress(caloBranch.c_str(), &trackCaloHits);
+  }
+
+  const Long64_t entriesToRead =
+    (maxEvents >= 0 && static_cast<Long64_t>(maxEvents) < nEntries) ? maxEvents : nEntries;
+
+  if (DO_FULL_PRINT)
+  {
+    cout << "Input: " << inputName << endl;
+    cout << "Tree entries available: " << nEntries << endl;
+    cout << "Tree entries being scanned: " << entriesToRead << endl;
+    cout << "Track branch: " << trackBranch << endl;
+    cout << "Track-segment branch: " << segmentBranch << endl;
+    cout << "Truth branch: " << simBranch << endl;
+    cout << "Track-calo branch: " << (hasCaloBranch ? caloBranch : string("missing")) << endl;
+    cout << "Reco momentum window: [" << momentumMin << ", " << momentumMax << "] MeV/c" << endl;
+    cout << "Required reco PDG: "
+         << (requiredRecoPdg == 0 ? string("disabled") : to_string(requiredRecoPdg)) << endl;
+    cout << "Require downstream TT_Mid pz > 0: "
+         << (requireDownstream ? "yes" : "no") << endl;
+    cout << "maxTruthPerTrack: "
+         << (maxTruthPerTrack < 0 ? string("all") : to_string(maxTruthPerTrack)) << endl;
+  }
+
+  //============================================================================
+  // Event Loop
+  //============================================================================
+
+  twoelectronhist::HistogramBook histograms = twoelectronhist::bookHistograms();
+
+  Long64_t eventsWithRecoTracks = 0;
+  Long64_t eventsWithAtLeastOneCandidateTrack = 0;
+  Long64_t eventsWithExactlyTwoCandidateTracks = 0;
+  Long64_t eventsWithAtLeastTwoCandidateTracks = 0;
+  Long64_t totalRecoTracks = 0;
+  Long64_t totalCandidateTracks = 0;
+
+  for (Long64_t entry = 0; entry < entriesToRead; ++entry)
+  {
+    ntuple.GetEntry(entry);
+
+    const size_t nTracks = tracks != nullptr ? tracks->size() : 0;
+    const bool eventHasRecoTracks = nTracks > 0;
+    if (eventHasRecoTracks)
+    {
+      ++eventsWithRecoTracks;
+    }
+    totalRecoTracks += static_cast<Long64_t>(nTracks);
+
+    if (DO_FULL_PRINT)
+    {
+      cout << "-------------------------------------------------------------------------------" << endl;
+      cout << "Event " << formatEventLabel(evtinfo, entry) << endl;
+      cout << "  reconstructed track branch present: yes" << endl;
+      cout << "  reconstructed tracks stored: " << nTracks << endl;
+      if (truthSimByTrack != nullptr)
+      {
+        cout << "  trkmcsim outer-vector size: " << truthSimByTrack->size() << endl;
+      }
+      else
+      {
+        cout << "  trkmcsim outer-vector size: unavailable" << endl;
+      }
+    }
+
+    vector<RecoTrackDecision> candidateTrackDecisions;
+
+    for (size_t iTrack = 0; iTrack < nTracks; ++iTrack)
+    {
+      const auto& track = tracks->at(iTrack);
+      const RecoTrackDecision decision =
+        evaluateRecoTrack(tracks,
+                          trackSegments,
+                          trackCaloHits,
+                          iTrack,
+                          momentumMin,
+                          momentumMax,
+                          requiredRecoPdg,
+                          requireDownstream);
+
+      if (DO_FULL_PRINT)
+      {
+        cout << "    reco track[" << iTrack << "]"
+             << " pdg=" << track.pdg
+             << " status=" << track.status
+             << " goodfit=" << track.goodfit
+             << " nhits=" << track.nhits
+             << " nactive=" << track.nactive
+             << " fitcon=" << track.fitcon
+             << endl;
+
+        printTruthForTrack(truthSimByTrack, iTrack, maxTruthPerTrack);
+
+        cout << "      reco branch for track: yes" << endl;
+        cout << "      associated calo hit: " << (decision.hasCalo ? "yes" : "no") << endl;
+        cout << "      reco momentum: ";
+        if (decision.momentum.valid)
+        {
+          cout << decision.momentum.momentum
+               << " MeV/c from " << decision.momentum.source;
+        }
+        else
+        {
+          cout << "unavailable";
+        }
+        cout << endl;
+        cout << "      reco momentum in [" << momentumMin << ", " << momentumMax
+             << "] MeV/c: " << (decision.momentumPass ? "yes" : "no") << endl;
+        cout << "      reco PDG requirement: " << (decision.pdgPass ? "pass" : "fail") << endl;
+        cout << "      downstream requirement: "
+             << (decision.downstreamPass ? "pass" : "fail") << endl;
+        cout << "      selected candidate track: "
+             << (decision.candidatePass ? "yes" : "no") << endl;
+      }
+
+      if (decision.candidatePass)
+      {
+        candidateTrackDecisions.push_back(decision);
+      }
+    }
+
+    totalCandidateTracks += static_cast<Long64_t>(candidateTrackDecisions.size());
+    if (!candidateTrackDecisions.empty())
+    {
+      ++eventsWithAtLeastOneCandidateTrack;
+    }
+    if (candidateTrackDecisions.size() == 2)
+    {
+      ++eventsWithExactlyTwoCandidateTracks;
+    }
+    if (candidateTrackDecisions.size() >= 2)
+    {
+      ++eventsWithAtLeastTwoCandidateTracks;
+    }
+
+    if (DO_FULL_PRINT)
+    {
+      cout << "  event candidate-track count: " << candidateTrackDecisions.size() << endl;
+      cout << "  event has two reconstructed tracks with requested properties: "
+           << (candidateTrackDecisions.size() >= 2 ? "yes" : "no") << endl;
+    }
+
+    // Build a vertex for the first two selected tracks when at least two pass.
+    // The printout uses this as a diagnostic preview.  The histogram fill below
+    // is stricter and requires exactly two selected tracks in the event.
+    bool vertexWasAttempted = false;
+    const mu2e::TrkSegInfo* firstVertexSegment = nullptr;
+    const mu2e::TrkSegInfo* secondVertexSegment = nullptr;
+    twoparticlevertexer::VertexResult selectedPairVertex;
+    size_t firstVertexTrackIndex = 0;
+    size_t secondVertexTrackIndex = 0;
+
+    if (candidateTrackDecisions.size() >= 2)
+    {
+      firstVertexTrackIndex = candidateTrackDecisions.at(0).trackIndex;
+      secondVertexTrackIndex = candidateTrackDecisions.at(1).trackIndex;
+      selectedPairVertex =
+        buildVertexForSelectedTrackPair(tracks,
+                                        trackSegments,
+                                        firstVertexTrackIndex,
+                                        secondVertexTrackIndex,
+                                        firstVertexSegment,
+                                        secondVertexSegment);
+      vertexWasAttempted = true;
+    }
+
+    // Histogram selection:
+    //   - exactly two selected reconstructed tracks in the event
+    //   - each selected track is a downstream electron by the reco selection
+    //   - each selected track has an associated calo hit
+    //   - each selected track has reconstructed momentum in the 50-53 MeV/c
+    //     window configured above
+    //
+    // Only after this event-level reco selection passes do we fill any truth,
+    // reco-momentum, or vertex histogram.
+    if (candidateTrackDecisions.size() == 2)
+    {
+      ++histograms.selectedEvents;
+
+      vector<size_t> selectedTrackIndices;
+      selectedTrackIndices.push_back(candidateTrackDecisions.at(0).trackIndex);
+      selectedTrackIndices.push_back(candidateTrackDecisions.at(1).trackIndex);
+
+      const mu2e::SimInfo* truthOrigin =
+        findRepresentativeTruthOrigin(truthSimByTrack, selectedTrackIndices, 11);
+
+      twoelectronhist::fillRankZeroDownstreamElectronTruthFromSelectedTracks(
+        histograms,
+        truthSimByTrack,
+        selectedTrackIndices,
+        11);
+
+      for (const auto& decision : candidateTrackDecisions)
+      {
+        twoelectronhist::fillRecoMomentum(histograms, decision.momentum.momentum);
+      }
+
+      if (vertexWasAttempted && selectedPairVertex.valid)
+      {
+        twoelectronhist::fillRecoVertex(histograms, selectedPairVertex);
+
+        if (truthOrigin != nullptr)
+        {
+          const XYZVectorF truthToReco = selectedPairVertex.vertex - truthOrigin->pos;
+          twoelectronhist::fillRecoVertexTruthResidual(histograms, truthToReco.z());
+        }
+      }
+    }
+
+    // Demonstrate the generic helper on the first two passing tracks.  This is
+    // a textual preview only; histograms fill from the stricter exactly-two
+    // event selection above.
+    if (DO_FULL_PRINT && vertexWasAttempted)
+    {
+        cout << "  twoParticleVertexer preview using selected tracks "
+             << firstVertexTrackIndex << " and " << secondVertexTrackIndex << ":" << endl;
+        if (selectedPairVertex.valid)
+        {
+          cout << "    seed surfaces: first sid=" << firstVertexSegment->sid
+               << " sindex=" << firstVertexSegment->sindex
+               << ", second sid=" << secondVertexSegment->sid
+               << " sindex=" << secondVertexSegment->sindex << endl;
+          cout << "    vertex midpoint(x,y,z)=" << formatVector3(selectedPairVertex.vertex)
+               << " closest-line distance=" << selectedPairVertex.distance << " mm"
+               << " delta_input_time=" << selectedPairVertex.deltaInputTime << " ns"
+               << endl;
+        }
+        else
+        {
+          cout << "    vertex unavailable: " << selectedPairVertex.failureReason << endl;
+        }
+    }
+
+    if (DO_VERTEX_ORIGIN_RESIDUAL_PRINT &&
+        vertexWasAttempted &&
+        selectedPairVertex.valid)
+    {
+      const vector<size_t> selectedTrackIndicesForTruth = {
+        firstVertexTrackIndex,
+        secondVertexTrackIndex
+      };
+      const mu2e::SimInfo* truthOrigin =
+        findRepresentativeTruthOrigin(truthSimByTrack, selectedTrackIndicesForTruth, 11);
+
+      if (truthOrigin != nullptr)
+      {
+        const XYZVectorF delta = selectedPairVertex.vertex - truthOrigin->pos;
+        cout << "  truth-origin vs reconstructed-vertex residual:" << endl;
+        cout << "    truth origin(t,x,y,z)=("
+             << truthOrigin->time << ", "
+             << truthOrigin->pos.x() << ", "
+             << truthOrigin->pos.y() << ", "
+             << truthOrigin->pos.z() << ")" << endl;
+        cout << "    reco vertex(x,y,z)="
+             << formatVector3(selectedPairVertex.vertex) << endl;
+        cout << "    delta(reco - truth)(dx,dy,dz)="
+             << formatVector3(delta) << endl;
+        cout << "    abs(delta)(|dx|,|dy|,|dz|)=("
+             << fabs(delta.x()) << ", "
+             << fabs(delta.y()) << ", "
+             << fabs(delta.z()) << ")" << endl;
+        cout << "    delta_z=" << delta.z()
+             << " mm, |delta_z|=" << fabs(delta.z()) << " mm" << endl;
+      }
+      else
+      {
+        cout << "  truth-origin vs reconstructed-vertex residual: unavailable"
+             << endl;
+      }
+    }
+  }
+
+  bool histogramFileWasWritten = false;
+  if (WRITE_HISTOGRAM_FILE)
+  {
+    histogramFileWasWritten =
+      twoelectronhist::writeHistograms(histograms, HISTOGRAM_OUTPUT_FILE);
+    if (histogramFileWasWritten)
+    {
+      twoelectronplots::saveTruthVsRecoPlotsFromFile(HISTOGRAM_OUTPUT_FILE,
+                                                     HISTOGRAM_PLOT_OUTPUT_DIR);
+    }
+  }
+
+  //============================================================================
+  // Summary
+  //============================================================================
+
+  cout << "===============================================================================" << endl;
+  cout << "twoElectronTruthTrkSegVertexerComparer summary" << endl;
+  cout << "  events scanned: " << entriesToRead << endl;
+  cout << "  events with at least one reconstructed track: "
+       << eventsWithRecoTracks << endl;
+  cout << "  total reconstructed tracks: " << totalRecoTracks << endl;
+  cout << "  total candidate tracks: " << totalCandidateTracks << endl;
+  cout << "  events with at least one candidate track: "
+       << eventsWithAtLeastOneCandidateTrack << endl;
+  cout << "  events with exactly two candidate tracks: "
+       << eventsWithExactlyTwoCandidateTracks << endl;
+  cout << "  events with at least two candidate tracks: "
+       << eventsWithAtLeastTwoCandidateTracks << endl;
+  cout << "  histogram-selected events, exactly two candidate tracks: "
+       << histograms.selectedEvents << endl;
+  cout << "  histogram MC truth entries, rank-0 downstream e-: "
+       << histograms.mcTruthEntries << endl;
+  cout << "  histogram reconstructed momentum entries: "
+       << histograms.recoMomentumEntries << endl;
+  cout << "  histogram reconstructed vertex entries: "
+       << histograms.recoVertexEntries << endl;
+  cout << "  histogram reconstructed-vs-truth vertex residual entries: "
+       << histograms.recoVertexTruthResidualEntries << endl;
+  if (WRITE_HISTOGRAM_FILE)
+  {
+    cout << "  histogram output file: "
+         << (histogramFileWasWritten ? HISTOGRAM_OUTPUT_FILE : "not written") << endl;
+    cout << "  histogram PDF output directory: "
+         << (histogramFileWasWritten ? HISTOGRAM_PLOT_OUTPUT_DIR : "not written")
+         << endl;
+  }
+}
+
