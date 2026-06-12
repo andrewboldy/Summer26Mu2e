@@ -1572,6 +1572,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.recoMomentumEntries << endl;
   cout << "  histogram reconstructed vertex entries: "
        << histograms.recoVertexEntries << endl;
+  cout << "  histogram reconstructed vertex line-parameter entries: "
+       << histograms.recoVertexLineParameterEntries << endl;
   cout << "  histogram foil-index matched reconstructed vertex map entries: "
        << histograms.recoVertexFoilIndexMatchedEntries << endl;
   cout << "  histogram reconstructed-vs-truth vertex residual entries: "

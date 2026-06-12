@@ -91,6 +91,13 @@ namespace twoelectronhist
     double vertexDistanceMin = 0.0;
     double vertexDistanceMax = 250.0;
 
+    int lineParameterBins = 240;
+    double lineParameterMin = -1200.0;
+    double lineParameterMax = 1200.0;
+    int absLineParameterBins = 240;
+    double absLineParameterMin = 0.0;
+    double absLineParameterMax = 1200.0;
+
     int timeDifferenceBins = 200;
     double timeDifferenceMin = -250.0;
     double timeDifferenceMax = 250.0;
@@ -126,6 +133,11 @@ namespace twoelectronhist
     TH2F* recoVertexFoilIndexMatchedXZ = nullptr;
     TH2F* recoVertexFoilIndexMatchedYZ = nullptr;
     TH1F* recoVertexLineDistance = nullptr;
+    TH1F* recoVertexLineParameterS = nullptr;
+    TH1F* recoVertexLineParameterT = nullptr;
+    TH1F* recoVertexAbsLineParameterS = nullptr;
+    TH1F* recoVertexAbsLineParameterT = nullptr;
+    TH2F* recoVertexAbsLineParameterST = nullptr;
     TH1F* recoVertexSelectedSegmentDeltaTTest = nullptr;
     TH1F* recoVertexMinTimeDifferenceTest = nullptr;
     TGraph* recoAllSharedFoilCandidateMaxLvsDeltaZ = nullptr;
@@ -163,6 +175,7 @@ namespace twoelectronhist
     Long64_t recoMomentumEntries = 0;
     Long64_t recoVertexEntries = 0;
     Long64_t recoVertexFoilIndexMatchedEntries = 0;
+    Long64_t recoVertexLineParameterEntries = 0;
     Long64_t recoVertexSelectedSegmentDeltaTEntries = 0;
     Long64_t recoVertexMinTimeDifferenceEntries = 0;
     Long64_t recoAllSharedFoilCandidateMaxLvsDeltaZEntries = 0;
@@ -365,6 +378,39 @@ namespace twoelectronhist
              config.vertexDistanceBins,
              config.vertexDistanceMin,
              config.vertexDistanceMax);
+    book.recoVertexLineParameterS =
+      make1D("hRecoTwoElectronVertexLineParameterS",
+             "Selected two-track closest-approach line parameter s;s [mm];entries",
+             config.lineParameterBins,
+             config.lineParameterMin,
+             config.lineParameterMax);
+    book.recoVertexLineParameterT =
+      make1D("hRecoTwoElectronVertexLineParameterT",
+             "Selected two-track closest-approach line parameter t;t [mm];entries",
+             config.lineParameterBins,
+             config.lineParameterMin,
+             config.lineParameterMax);
+    book.recoVertexAbsLineParameterS =
+      make1D("hRecoTwoElectronVertexAbsLineParameterS",
+             "Selected two-track closest-approach absolute line parameter |s|;|s| [mm];entries",
+             config.absLineParameterBins,
+             config.absLineParameterMin,
+             config.absLineParameterMax);
+    book.recoVertexAbsLineParameterT =
+      make1D("hRecoTwoElectronVertexAbsLineParameterT",
+             "Selected two-track closest-approach absolute line parameter |t|;|t| [mm];entries",
+             config.absLineParameterBins,
+             config.absLineParameterMin,
+             config.absLineParameterMax);
+    book.recoVertexAbsLineParameterST =
+      make2D("hRecoTwoElectronVertexAbsLineParameterST",
+             "Selected two-track closest-approach absolute line parameters;|s| [mm];|t| [mm]",
+             config.absLineParameterBins,
+             config.absLineParameterMin,
+             config.absLineParameterMax,
+             config.absLineParameterBins,
+             config.absLineParameterMin,
+             config.absLineParameterMax);
     book.recoVertexSelectedSegmentDeltaTTest =
       make1D("hTESTRecoTwoElectronVertexSelectedSegmentDeltaT",
              "TEST: selected two-track segment time difference;#Delta t [ns];entries",
@@ -661,6 +707,22 @@ namespace twoelectronhist
     book.recoVertexXZ->Fill(vertex.vertex.x(), vertex.vertex.z());
     book.recoVertexYZ->Fill(vertex.vertex.y(), vertex.vertex.z());
     book.recoVertexLineDistance->Fill(vertex.distance);
+
+    const double lineParameterS = vertex.firstLineParameter;
+    const double lineParameterT = vertex.secondLineParameter;
+    if (std::isfinite(lineParameterS) && std::isfinite(lineParameterT))
+    {
+      const double absLineParameterS = std::fabs(lineParameterS);
+      const double absLineParameterT = std::fabs(lineParameterT);
+      book.recoVertexLineParameterS->Fill(lineParameterS);
+      book.recoVertexLineParameterT->Fill(lineParameterT);
+      book.recoVertexAbsLineParameterS->Fill(absLineParameterS);
+      book.recoVertexAbsLineParameterT->Fill(absLineParameterT);
+      book.recoVertexAbsLineParameterST->Fill(absLineParameterS,
+                                              absLineParameterT);
+      ++book.recoVertexLineParameterEntries;
+    }
+
     ++book.recoVertexEntries;
   }
 
@@ -907,6 +969,11 @@ namespace twoelectronhist
     writeOne(book.recoVertexFoilIndexMatchedXZ);
     writeOne(book.recoVertexFoilIndexMatchedYZ);
     writeOne(book.recoVertexLineDistance);
+    writeOne(book.recoVertexLineParameterS);
+    writeOne(book.recoVertexLineParameterT);
+    writeOne(book.recoVertexAbsLineParameterS);
+    writeOne(book.recoVertexAbsLineParameterT);
+    writeOne(book.recoVertexAbsLineParameterST);
     writeOne(book.recoVertexSelectedSegmentDeltaTTest);
     writeOne(book.recoVertexMinTimeDifferenceTest);
     writeOne(book.recoAllSharedFoilCandidateMaxLvsDeltaZ);

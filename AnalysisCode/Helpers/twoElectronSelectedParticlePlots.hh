@@ -236,6 +236,21 @@ namespace twoelectronplots
       "hRecoTwoElectronVertexFoilIndexMatchedYZ");
     TH1F* hRecoVertexDistance = get1DHistogram(*histogramFile,
                                                 "hRecoTwoElectronVertexLineDistance");
+    TH1F* hRecoVertexLineParameterS = get1DHistogram(
+      *histogramFile,
+      "hRecoTwoElectronVertexLineParameterS");
+    TH1F* hRecoVertexLineParameterT = get1DHistogram(
+      *histogramFile,
+      "hRecoTwoElectronVertexLineParameterT");
+    TH1F* hRecoVertexAbsLineParameterS = get1DHistogram(
+      *histogramFile,
+      "hRecoTwoElectronVertexAbsLineParameterS");
+    TH1F* hRecoVertexAbsLineParameterT = get1DHistogram(
+      *histogramFile,
+      "hRecoTwoElectronVertexAbsLineParameterT");
+    TH2F* hRecoVertexAbsLineParameterST = get2DHistogram(
+      *histogramFile,
+      "hRecoTwoElectronVertexAbsLineParameterST");
     TH1F* hRecoVertexTruthDeltaX = get1DHistogram(*histogramFile,
                                                    "hRecoTruthVertexDeltaX");
     TH1F* hRecoVertexTruthDeltaY = get1DHistogram(*histogramFile,
@@ -334,6 +349,11 @@ namespace twoelectronplots
         hRecoVertexY == nullptr || hRecoVertexZ == nullptr ||
         hRecoVertexXY == nullptr || hRecoVertexXZ == nullptr ||
         hRecoVertexYZ == nullptr || hRecoVertexDistance == nullptr ||
+        hRecoVertexLineParameterS == nullptr ||
+        hRecoVertexLineParameterT == nullptr ||
+        hRecoVertexAbsLineParameterS == nullptr ||
+        hRecoVertexAbsLineParameterT == nullptr ||
+        hRecoVertexAbsLineParameterST == nullptr ||
         hRecoVertexFoilIndexMatchedXY == nullptr ||
         hRecoVertexFoilIndexMatchedXZ == nullptr ||
         hRecoVertexFoilIndexMatchedYZ == nullptr ||
@@ -384,6 +404,10 @@ namespace twoelectronplots
     style1DHistogram(hRecoVertexY);
     style1DHistogram(hRecoVertexZ);
     style1DHistogram(hRecoVertexDistance);
+    style1DHistogram(hRecoVertexLineParameterS);
+    style1DHistogram(hRecoVertexLineParameterT);
+    style1DHistogram(hRecoVertexAbsLineParameterS);
+    style1DHistogram(hRecoVertexAbsLineParameterT);
     style1DHistogram(hRecoVertexTruthDeltaX);
     style1DHistogram(hRecoVertexTruthDeltaY);
     style1DHistogram(hRecoVertexTruthDeltaZ);
@@ -455,6 +479,32 @@ namespace twoelectronplots
     cRecoVertex.cd(3); hRecoVertexZ->Draw("HIST E");
     cRecoVertex.cd(4); hRecoVertexDistance->Draw("HIST E");
     cRecoVertex.SaveAs((outputDirectory + "/RecoVertex_1D.pdf").c_str());
+
+    TCanvas cRecoVertexLineParameters(
+      "cRecoVertexLineParameters",
+      "Selected reconstructed two-electron vertex line parameters",
+      1200,
+      800);
+    cRecoVertexLineParameters.Divide(2, 2);
+    cRecoVertexLineParameters.cd(1);
+    hRecoVertexLineParameterS->Draw("HIST E");
+    cRecoVertexLineParameters.cd(2);
+    hRecoVertexLineParameterT->Draw("HIST E");
+    cRecoVertexLineParameters.cd(3);
+    hRecoVertexAbsLineParameterS->Draw("HIST E");
+    cRecoVertexLineParameters.cd(4);
+    hRecoVertexAbsLineParameterT->Draw("HIST E");
+    cRecoVertexLineParameters.SaveAs(
+      (outputDirectory + "/RecoVertexLineParameters_1D.pdf").c_str());
+
+    TCanvas cRecoVertexAbsLineParameterST(
+      "cRecoVertexAbsLineParameterST",
+      "Selected reconstructed two-electron vertex |s| vs |t|",
+      900,
+      700);
+    draw2DHistogram(hRecoVertexAbsLineParameterST);
+    cRecoVertexAbsLineParameterST.SaveAs(
+      (outputDirectory + "/RecoVertexAbsLineParameterST_2D.pdf").c_str());
 
     TCanvas cRecoVertexResidual("cRecoVertexResidual",
                                 "Selected reconstructed minus truth vertex residual",
