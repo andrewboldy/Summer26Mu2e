@@ -227,6 +227,12 @@ namespace twoelectronplots
     TH2F* hRecoVertexXY = get2DHistogram(*histogramFile, "hRecoTwoElectronVertexXY");
     TH2F* hRecoVertexXZ = get2DHistogram(*histogramFile, "hRecoTwoElectronVertexXZ");
     TH2F* hRecoVertexYZ = get2DHistogram(*histogramFile, "hRecoTwoElectronVertexYZ");
+    TH2F* hRecoVertexSpaceSelectedMomentumTheta1Theta2 = get2DHistogram(
+      *histogramFile,
+      "hRecoTwoElectronVertexSpaceSelectedMomentumTheta1Theta2");
+    TH1F* hRecoVertexSpaceSelectedMomentumOpeningAngle = get1DHistogram(
+      *histogramFile,
+      "hRecoTwoElectronVertexSpaceSelectedMomentumOpeningAngle");
     TH2F* hRecoVertexFoilIndexMatchedXY = get2DHistogram(
       *histogramFile,
       "hRecoTwoElectronVertexFoilIndexMatchedXY");
@@ -312,6 +318,12 @@ namespace twoelectronplots
     TH2F* hTestRecoVertexMinTimeYZ = get2DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeYZ");
+    TH2F* hTestRecoVertexMinTimeMomentumTheta1Theta2 = get2DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeMomentumTheta1Theta2");
+    TH1F* hTestRecoVertexMinTimeMomentumOpeningAngle = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeMomentumOpeningAngle");
     TH2F* hTestRecoVertexMinTimeFoilIndexMatchedXY = get2DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeFoilIndexMatchedXY");
@@ -362,7 +374,10 @@ namespace twoelectronplots
         hRecoMomentum == nullptr || hRecoVertexX == nullptr ||
         hRecoVertexY == nullptr || hRecoVertexZ == nullptr ||
         hRecoVertexXY == nullptr || hRecoVertexXZ == nullptr ||
-        hRecoVertexYZ == nullptr || hRecoVertexDistance == nullptr ||
+        hRecoVertexYZ == nullptr ||
+        hRecoVertexSpaceSelectedMomentumTheta1Theta2 == nullptr ||
+        hRecoVertexSpaceSelectedMomentumOpeningAngle == nullptr ||
+        hRecoVertexDistance == nullptr ||
         hRecoVertexLineParameterS == nullptr ||
         hRecoVertexLineParameterT == nullptr ||
         hRecoVertexAbsLineParameterS == nullptr ||
@@ -390,6 +405,8 @@ namespace twoelectronplots
         hTestRecoVertexMinTimeXY == nullptr ||
         hTestRecoVertexMinTimeXZ == nullptr ||
         hTestRecoVertexMinTimeYZ == nullptr ||
+        hTestRecoVertexMinTimeMomentumTheta1Theta2 == nullptr ||
+        hTestRecoVertexMinTimeMomentumOpeningAngle == nullptr ||
         hTestRecoVertexMinTimeFoilIndexMatchedXY == nullptr ||
         hTestRecoVertexMinTimeFoilIndexMatchedXZ == nullptr ||
         hTestRecoVertexMinTimeFoilIndexMatchedYZ == nullptr ||
@@ -421,6 +438,7 @@ namespace twoelectronplots
     style1DHistogram(hRecoVertexX);
     style1DHistogram(hRecoVertexY);
     style1DHistogram(hRecoVertexZ);
+    style1DHistogram(hRecoVertexSpaceSelectedMomentumOpeningAngle);
     style1DHistogram(hRecoVertexDistance);
     style1DHistogram(hRecoVertexLineParameterS);
     style1DHistogram(hRecoVertexLineParameterT);
@@ -445,6 +463,7 @@ namespace twoelectronplots
     style1DHistogram(hTestRecoVertexMinTimeX);
     style1DHistogram(hTestRecoVertexMinTimeY);
     style1DHistogram(hTestRecoVertexMinTimeZ);
+    style1DHistogram(hTestRecoVertexMinTimeMomentumOpeningAngle);
     style1DHistogram(hTestRecoVertexMinTimeDistance);
     style1DHistogram(hTestRecoVertexMinTimeTruthDeltaX);
     style1DHistogram(hTestRecoVertexMinTimeTruthDeltaY);
@@ -559,6 +578,28 @@ namespace twoelectronplots
     cRecoVertexMaps.cd(2); draw2DHistogram(hRecoVertexXZ); drawStoppingTargetBoxXZ();
     cRecoVertexMaps.cd(3); draw2DHistogram(hRecoVertexYZ); drawStoppingTargetBoxYZ();
     cRecoVertexMaps.SaveAs((outputDirectory + "/RecoVertex_2DMaps.pdf").c_str());
+
+    TCanvas cRecoVertexSpaceMomentumTheta(
+      "cRecoVertexSpaceMomentumTheta",
+      "Space-selected shared ST_Foils momentum polar angles",
+      900,
+      700);
+    draw2DHistogram(hRecoVertexSpaceSelectedMomentumTheta1Theta2);
+    cRecoVertexSpaceMomentumTheta.SaveAs(
+      (outputDirectory + "/RecoVertexSpaceSelectedMomentumTheta1Theta2_2D.pdf").c_str());
+
+    TCanvas cRecoVertexMomentumOpeningAngle(
+      "cRecoVertexMomentumOpeningAngle",
+      "Selected shared ST_Foils momentum opening angles",
+      1200,
+      500);
+    cRecoVertexMomentumOpeningAngle.Divide(2, 1);
+    cRecoVertexMomentumOpeningAngle.cd(1);
+    hRecoVertexSpaceSelectedMomentumOpeningAngle->Draw("HIST E");
+    cRecoVertexMomentumOpeningAngle.cd(2);
+    hTestRecoVertexMinTimeMomentumOpeningAngle->Draw("HIST E");
+    cRecoVertexMomentumOpeningAngle.SaveAs(
+      (outputDirectory + "/RecoVertexMomentumOpeningAngle_1D.pdf").c_str());
 
     TCanvas cRecoVertexFoilIndexMatchedMaps(
       "cRecoVertexFoilIndexMatchedMaps",
@@ -727,6 +768,15 @@ namespace twoelectronplots
     draw2DHistogram(hTestRecoVertexMinTimeYZ); drawStoppingTargetBoxYZ();
     cTestRecoVertexMinTimeMaps.SaveAs(
       (outputDirectory + "/RecoVertexMinTimeChoice_2DMaps_TEST.pdf").c_str());
+
+    TCanvas cTestRecoVertexMinTimeMomentumTheta(
+      "cTestRecoVertexMinTimeMomentumTheta",
+      "TEST: minimum-|#Delta t| shared ST_Foils momentum polar angles",
+      900,
+      700);
+    draw2DHistogram(hTestRecoVertexMinTimeMomentumTheta1Theta2);
+    cTestRecoVertexMinTimeMomentumTheta.SaveAs(
+      (outputDirectory + "/RecoVertexMinTimeMomentumTheta1Theta2_2D_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTimeFoilIndexMatchedMaps(
       "cTestRecoVertexMinTimeFoilIndexMatchedMaps",

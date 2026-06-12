@@ -1587,6 +1587,10 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.recoMomentumEntries << endl;
   cout << "  histogram reconstructed vertex entries: "
        << histograms.recoVertexEntries << endl;
+  cout << "  histogram reconstructed vertex momentum theta-pair entries: "
+       << histograms.recoVertexMomentumThetaEntries << endl;
+  cout << "  histogram reconstructed vertex momentum opening-angle entries: "
+       << histograms.recoVertexMomentumOpeningAngleEntries << endl;
   cout << "  histogram reconstructed vertex line-parameter entries: "
        << histograms.recoVertexLineParameterEntries << endl;
   cout << "  histogram foil-index matched reconstructed vertex map entries: "
@@ -1605,6 +1609,10 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries << endl;
   cout << "  histogram TEST minimum-time reconstructed vertex entries: "
        << histograms.testRecoVertexMinTimeEntries << endl;
+  cout << "  histogram TEST minimum-time momentum theta-pair entries: "
+       << histograms.testRecoVertexMinTimeMomentumThetaEntries << endl;
+  cout << "  histogram TEST minimum-time momentum opening-angle entries: "
+       << histograms.testRecoVertexMinTimeMomentumOpeningAngleEntries << endl;
   cout << "  histogram TEST foil-index matched minimum-time reconstructed vertex map entries: "
        << histograms.testRecoVertexMinTimeFoilIndexMatchedEntries << endl;
   cout << "  histogram TEST minimum-time vertex delta-t entries: "

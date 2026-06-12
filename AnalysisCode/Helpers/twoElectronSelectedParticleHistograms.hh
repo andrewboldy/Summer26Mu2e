@@ -65,6 +65,8 @@
 
 namespace twoelectronhist
 {
+  constexpr double kPi = 3.14159265358979323846;
+
   // Histogram ranges are kept in one config object so later tuning does not
   // touch the event-selection code.  The default position bounds match the
   // original vertexer macro so the truth and reco position plots are directly
@@ -74,6 +76,10 @@ namespace twoelectronhist
     int momentumBins = 140;
     double momentumMin = 30.0;
     double momentumMax = 55.0;
+
+    int angleBins = 180;
+    double thetaMin = 0.0;
+    double thetaMax = kPi;
 
     int timeBins = 200;
     double timeMin = 0.0;
@@ -129,6 +135,8 @@ namespace twoelectronhist
     TH2F* recoVertexXY = nullptr;
     TH2F* recoVertexXZ = nullptr;
     TH2F* recoVertexYZ = nullptr;
+    TH2F* recoVertexSpaceSelectedMomentumTheta1Theta2 = nullptr;
+    TH1F* recoVertexSpaceSelectedMomentumOpeningAngle = nullptr;
     TH2F* recoVertexFoilIndexMatchedXY = nullptr;
     TH2F* recoVertexFoilIndexMatchedXZ = nullptr;
     TH2F* recoVertexFoilIndexMatchedYZ = nullptr;
@@ -151,6 +159,8 @@ namespace twoelectronhist
     TH2F* testRecoVertexMinTimeXY = nullptr;
     TH2F* testRecoVertexMinTimeXZ = nullptr;
     TH2F* testRecoVertexMinTimeYZ = nullptr;
+    TH2F* testRecoVertexMinTimeMomentumTheta1Theta2 = nullptr;
+    TH1F* testRecoVertexMinTimeMomentumOpeningAngle = nullptr;
     TH2F* testRecoVertexMinTimeFoilIndexMatchedXY = nullptr;
     TH2F* testRecoVertexMinTimeFoilIndexMatchedXZ = nullptr;
     TH2F* testRecoVertexMinTimeFoilIndexMatchedYZ = nullptr;
@@ -178,6 +188,8 @@ namespace twoelectronhist
     Long64_t mcTruthEntries = 0;
     Long64_t recoMomentumEntries = 0;
     Long64_t recoVertexEntries = 0;
+    Long64_t recoVertexMomentumThetaEntries = 0;
+    Long64_t recoVertexMomentumOpeningAngleEntries = 0;
     Long64_t recoVertexFoilIndexMatchedEntries = 0;
     Long64_t recoVertexLineParameterEntries = 0;
     Long64_t recoVertexSelectedSegmentDeltaTEntries = 0;
@@ -187,6 +199,8 @@ namespace twoelectronhist
     Long64_t recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t testRecoVertexMinTimeEntries = 0;
+    Long64_t testRecoVertexMinTimeMomentumThetaEntries = 0;
+    Long64_t testRecoVertexMinTimeMomentumOpeningAngleEntries = 0;
     Long64_t testRecoVertexMinTimeFoilIndexMatchedEntries = 0;
     Long64_t testRecoMinTimeSharedFoilMaxLvsDeltaZEntries = 0;
     Long64_t testRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZEntries = 0;
@@ -352,6 +366,21 @@ namespace twoelectronhist
              config.zBins,
              config.zMin,
              config.zMax);
+    book.recoVertexSpaceSelectedMomentumTheta1Theta2 =
+      make2D("hRecoTwoElectronVertexSpaceSelectedMomentumTheta1Theta2",
+             "Space-selected shared ST_Foils momentum polar angles;#theta_{1} [rad];#theta_{2} [rad]",
+             config.angleBins,
+             config.thetaMin,
+             config.thetaMax,
+             config.angleBins,
+             config.thetaMin,
+             config.thetaMax);
+    book.recoVertexSpaceSelectedMomentumOpeningAngle =
+      make1D("hRecoTwoElectronVertexSpaceSelectedMomentumOpeningAngle",
+             "Space-selected shared ST_Foils momentum opening angle;opening angle [rad];entries",
+             config.angleBins,
+             config.thetaMin,
+             config.thetaMax);
     book.recoVertexFoilIndexMatchedXY =
       make2D("hRecoTwoElectronVertexFoilIndexMatchedXY",
              "Foil-index matched selected two-track reconstructed vertex;x_{vtx} [mm];y_{vtx} [mm]",
@@ -496,6 +525,21 @@ namespace twoelectronhist
              config.zBins,
              config.zMin,
              config.zMax);
+    book.testRecoVertexMinTimeMomentumTheta1Theta2 =
+      make2D("hTESTRecoTwoElectronVertexMinTimeMomentumTheta1Theta2",
+             "TEST: minimum-|#Delta t| shared ST_Foils momentum polar angles;#theta_{1} [rad];#theta_{2} [rad]",
+             config.angleBins,
+             config.thetaMin,
+             config.thetaMax,
+             config.angleBins,
+             config.thetaMin,
+             config.thetaMax);
+    book.testRecoVertexMinTimeMomentumOpeningAngle =
+      make1D("hTESTRecoTwoElectronVertexMinTimeMomentumOpeningAngle",
+             "TEST: minimum-|#Delta t| shared ST_Foils momentum opening angle;opening angle [rad];entries",
+             config.angleBins,
+             config.thetaMin,
+             config.thetaMax);
     book.testRecoVertexMinTimeFoilIndexMatchedXY =
       make2D("hTESTRecoTwoElectronVertexMinTimeFoilIndexMatchedXY",
              "TEST: foil-index matched minimum-|#Delta t| reconstructed vertex;x_{vtx} [mm];y_{vtx} [mm]",
@@ -717,6 +761,74 @@ namespace twoelectronhist
     ++book.recoMomentumEntries;
   }
 
+  inline double momentumPolarTheta(const twoparticlevertexer::Line3D& line)
+  {
+    if (!line.valid)
+    {
+      return -1.0;
+    }
+
+    const double transverseMomentumDirection =
+      std::sqrt(line.unitDirection.x() * line.unitDirection.x() +
+                line.unitDirection.y() * line.unitDirection.y());
+    return std::atan2(transverseMomentumDirection, line.unitDirection.z());
+  }
+
+  inline bool fillMomentumThetaPair(
+    TH2F* histogram,
+    const twoparticlevertexer::VertexResult& vertex)
+  {
+    if (histogram == nullptr || !vertex.valid)
+    {
+      return false;
+    }
+
+    const double theta1 = momentumPolarTheta(vertex.firstLine);
+    const double theta2 = momentumPolarTheta(vertex.secondLine);
+    if (!std::isfinite(theta1) || !std::isfinite(theta2) ||
+        theta1 < 0.0 || theta2 < 0.0)
+    {
+      return false;
+    }
+
+    histogram->Fill(theta1, theta2);
+    return true;
+  }
+
+  inline double momentumOpeningAngle(
+    const twoparticlevertexer::VertexResult& vertex)
+  {
+    if (!vertex.valid || !vertex.firstLine.valid || !vertex.secondLine.valid)
+    {
+      return -1.0;
+    }
+
+    const double directionDotProduct =
+      vertex.firstLine.unitDirection.Dot(vertex.secondLine.unitDirection);
+    const double clampedDotProduct =
+      std::max(-1.0, std::min(1.0, directionDotProduct));
+    return std::acos(clampedDotProduct);
+  }
+
+  inline bool fillMomentumOpeningAngle(
+    TH1F* histogram,
+    const twoparticlevertexer::VertexResult& vertex)
+  {
+    if (histogram == nullptr || !vertex.valid)
+    {
+      return false;
+    }
+
+    const double openingAngle = momentumOpeningAngle(vertex);
+    if (!std::isfinite(openingAngle) || openingAngle < 0.0)
+    {
+      return false;
+    }
+
+    histogram->Fill(openingAngle);
+    return true;
+  }
+
   inline void fillRecoVertex(HistogramBook& book,
                              const twoparticlevertexer::VertexResult& vertex)
   {
@@ -732,6 +844,17 @@ namespace twoelectronhist
     book.recoVertexXZ->Fill(vertex.vertex.x(), vertex.vertex.z());
     book.recoVertexYZ->Fill(vertex.vertex.y(), vertex.vertex.z());
     book.recoVertexLineDistance->Fill(vertex.distance);
+    if (fillMomentumThetaPair(book.recoVertexSpaceSelectedMomentumTheta1Theta2,
+                              vertex))
+    {
+      ++book.recoVertexMomentumThetaEntries;
+    }
+    if (fillMomentumOpeningAngle(
+          book.recoVertexSpaceSelectedMomentumOpeningAngle,
+          vertex))
+    {
+      ++book.recoVertexMomentumOpeningAngleEntries;
+    }
 
     const double lineParameterS = vertex.firstLineParameter;
     const double lineParameterT = vertex.secondLineParameter;
@@ -931,6 +1054,17 @@ namespace twoelectronhist
     book.testRecoVertexMinTimeXZ->Fill(vertex.vertex.x(), vertex.vertex.z());
     book.testRecoVertexMinTimeYZ->Fill(vertex.vertex.y(), vertex.vertex.z());
     book.testRecoVertexMinTimeLineDistance->Fill(vertex.distance);
+    if (fillMomentumThetaPair(book.testRecoVertexMinTimeMomentumTheta1Theta2,
+                              vertex))
+    {
+      ++book.testRecoVertexMinTimeMomentumThetaEntries;
+    }
+    if (fillMomentumOpeningAngle(
+          book.testRecoVertexMinTimeMomentumOpeningAngle,
+          vertex))
+    {
+      ++book.testRecoVertexMinTimeMomentumOpeningAngleEntries;
+    }
     ++book.testRecoVertexMinTimeEntries;
   }
 
@@ -1054,6 +1188,8 @@ namespace twoelectronhist
     writeOne(book.recoVertexXY);
     writeOne(book.recoVertexXZ);
     writeOne(book.recoVertexYZ);
+    writeOne(book.recoVertexSpaceSelectedMomentumTheta1Theta2);
+    writeOne(book.recoVertexSpaceSelectedMomentumOpeningAngle);
     writeOne(book.recoVertexFoilIndexMatchedXY);
     writeOne(book.recoVertexFoilIndexMatchedXZ);
     writeOne(book.recoVertexFoilIndexMatchedYZ);
@@ -1076,6 +1212,8 @@ namespace twoelectronhist
     writeOne(book.testRecoVertexMinTimeXY);
     writeOne(book.testRecoVertexMinTimeXZ);
     writeOne(book.testRecoVertexMinTimeYZ);
+    writeOne(book.testRecoVertexMinTimeMomentumTheta1Theta2);
+    writeOne(book.testRecoVertexMinTimeMomentumOpeningAngle);
     writeOne(book.testRecoVertexMinTimeFoilIndexMatchedXY);
     writeOne(book.testRecoVertexMinTimeFoilIndexMatchedXZ);
     writeOne(book.testRecoVertexMinTimeFoilIndexMatchedYZ);
