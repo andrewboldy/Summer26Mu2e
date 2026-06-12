@@ -45,6 +45,8 @@ namespace twoelectronplots
   constexpr double kStoppingTargetZMax = -3899.947;
   constexpr double kFoilPointTruthDistancePlotMin = 0.0;
   constexpr double kFoilPointTruthDistancePlotMax = 1000.0;
+  constexpr double kAverageAbsLineParameterPlotMin = 0.0;
+  constexpr double kAverageAbsLineParameterPlotMax = 1200.0;
   constexpr double kRecoTruthDeltaZPlotMin = -1000.0;
   constexpr double kRecoTruthDeltaZPlotMax = 1000.0;
 
@@ -286,6 +288,12 @@ namespace twoelectronplots
     TGraph* gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ = getGraph(
       *histogramFile,
       "gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ");
+    TGraph* gRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ =
+      getGraph(*histogramFile,
+               "gRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ");
+    TGraph* gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ =
+      getGraph(*histogramFile,
+               "gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ");
     TH1F* hTestRecoVertexMinTimeX = get1DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeX");
@@ -316,6 +324,9 @@ namespace twoelectronplots
     TGraph* gTestRecoMinTimeSharedFoilMaxLvsDeltaZ = getGraph(
       *histogramFile,
       "gTESTRecoMinTimeSharedFoilMaxLvsDeltaZ");
+    TGraph* gTestRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ =
+      getGraph(*histogramFile,
+               "gTESTRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ");
     TH1F* hTestRecoVertexMinTimeDistance = get1DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeLineDistance");
@@ -371,6 +382,8 @@ namespace twoelectronplots
         hRecoVertexMinTimeDifferenceTest == nullptr ||
         gRecoAllSharedFoilCandidateMaxLvsDeltaZ == nullptr ||
         gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ == nullptr ||
+        gRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ == nullptr ||
+        gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ == nullptr ||
         hTestRecoVertexMinTimeX == nullptr ||
         hTestRecoVertexMinTimeY == nullptr ||
         hTestRecoVertexMinTimeZ == nullptr ||
@@ -381,6 +394,7 @@ namespace twoelectronplots
         hTestRecoVertexMinTimeFoilIndexMatchedXZ == nullptr ||
         hTestRecoVertexMinTimeFoilIndexMatchedYZ == nullptr ||
         gTestRecoMinTimeSharedFoilMaxLvsDeltaZ == nullptr ||
+        gTestRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ == nullptr ||
         hTestRecoVertexMinTimeDistance == nullptr ||
         hTestRecoVertexMinTimeTruthDeltaX == nullptr ||
         hTestRecoVertexMinTimeTruthDeltaY == nullptr ||
@@ -424,6 +438,10 @@ namespace twoelectronplots
     style1DHistogram(hRecoVertexMinTimeDifferenceTest);
     styleScatterGraph(gRecoAllSharedFoilCandidateMaxLvsDeltaZ, kBlue + 1);
     styleScatterGraph(gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ, kGreen + 2);
+    styleScatterGraph(gRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ,
+                      kBlue + 1);
+    styleScatterGraph(gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ,
+                      kGreen + 2);
     style1DHistogram(hTestRecoVertexMinTimeX);
     style1DHistogram(hTestRecoVertexMinTimeY);
     style1DHistogram(hTestRecoVertexMinTimeZ);
@@ -437,6 +455,8 @@ namespace twoelectronplots
     style1DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ);
     style1DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedTruthDistance);
     styleScatterGraph(gTestRecoMinTimeSharedFoilMaxLvsDeltaZ, kMagenta + 2);
+    styleScatterGraph(gTestRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ,
+                      kMagenta + 2);
 
     TCanvas cTruthOrigin("cTruthOrigin",
                          "MC truth rank-0 downstream electron origin",
@@ -626,6 +646,45 @@ namespace twoelectronplots
                      kRecoTruthDeltaZPlotMax);
     cRecoMinTimeMaxLvsDeltaZTest.SaveAs(
       (outputDirectory + "/RecoMinTimeSharedFoilMaxLvsDeltaZ_Scatter_TEST.pdf").c_str());
+
+    TCanvas cRecoAllSharedFoilAvgAbsLineParameterVsDeltaZ(
+      "cRecoAllSharedFoilAvgAbsLineParameterVsDeltaZ",
+      "All shared same-foil candidate pairs: #Delta z vs (|s|+|t|)/2",
+      900,
+      700);
+    drawScatterGraph(gRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ,
+                     kAverageAbsLineParameterPlotMin,
+                     kAverageAbsLineParameterPlotMax,
+                     kRecoTruthDeltaZPlotMin,
+                     kRecoTruthDeltaZPlotMax);
+    cRecoAllSharedFoilAvgAbsLineParameterVsDeltaZ.SaveAs(
+      (outputDirectory + "/RecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ_Scatter.pdf").c_str());
+
+    TCanvas cRecoSpaceSelectedAvgAbsLineParameterVsDeltaZ(
+      "cRecoSpaceSelectedAvgAbsLineParameterVsDeltaZ",
+      "Space-selected shared same-foil pair: #Delta z vs (|s|+|t|)/2",
+      900,
+      700);
+    drawScatterGraph(gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ,
+                     kAverageAbsLineParameterPlotMin,
+                     kAverageAbsLineParameterPlotMax,
+                     kRecoTruthDeltaZPlotMin,
+                     kRecoTruthDeltaZPlotMax);
+    cRecoSpaceSelectedAvgAbsLineParameterVsDeltaZ.SaveAs(
+      (outputDirectory + "/RecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ_Scatter.pdf").c_str());
+
+    TCanvas cRecoMinTimeAvgAbsLineParameterVsDeltaZTest(
+      "cRecoMinTimeAvgAbsLineParameterVsDeltaZTest",
+      "TEST: minimum-|#Delta t| shared same-foil pair: #Delta z vs (|s|+|t|)/2",
+      900,
+      700);
+    drawScatterGraph(gTestRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ,
+                     kAverageAbsLineParameterPlotMin,
+                     kAverageAbsLineParameterPlotMax,
+                     kRecoTruthDeltaZPlotMin,
+                     kRecoTruthDeltaZPlotMax);
+    cRecoMinTimeAvgAbsLineParameterVsDeltaZTest.SaveAs(
+      (outputDirectory + "/RecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ_Scatter_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTime("cTestRecoVertexMinTime",
                                    "TEST: minimum-|#Delta t| reconstructed two-electron vertex position",

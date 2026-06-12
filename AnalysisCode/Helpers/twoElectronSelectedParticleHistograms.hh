@@ -143,6 +143,8 @@ namespace twoelectronhist
     TH1F* recoVertexMinTimeDifferenceTest = nullptr;
     TGraph* recoAllSharedFoilCandidateMaxLvsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedSharedFoilMaxLvsDeltaZ = nullptr;
+    TGraph* recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ = nullptr;
+    TGraph* recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ = nullptr;
     TH1F* testRecoVertexMinTimeX = nullptr;
     TH1F* testRecoVertexMinTimeY = nullptr;
     TH1F* testRecoVertexMinTimeZ = nullptr;
@@ -153,6 +155,7 @@ namespace twoelectronhist
     TH2F* testRecoVertexMinTimeFoilIndexMatchedXZ = nullptr;
     TH2F* testRecoVertexMinTimeFoilIndexMatchedYZ = nullptr;
     TGraph* testRecoMinTimeSharedFoilMaxLvsDeltaZ = nullptr;
+    TGraph* testRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ = nullptr;
     TH1F* testRecoVertexMinTimeLineDistance = nullptr;
     TH1F* recoVertexTruthDeltaX = nullptr;
     TH1F* recoVertexTruthDeltaY = nullptr;
@@ -181,9 +184,12 @@ namespace twoelectronhist
     Long64_t recoVertexMinTimeDifferenceEntries = 0;
     Long64_t recoAllSharedFoilCandidateMaxLvsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilMaxLvsDeltaZEntries = 0;
+    Long64_t recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZEntries = 0;
+    Long64_t recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t testRecoVertexMinTimeEntries = 0;
     Long64_t testRecoVertexMinTimeFoilIndexMatchedEntries = 0;
     Long64_t testRecoMinTimeSharedFoilMaxLvsDeltaZEntries = 0;
+    Long64_t testRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t recoVertexTruthResidualEntries = 0;
     Long64_t recoVertexFoilIndexMatchedTruthResidualEntries = 0;
     Long64_t testRecoVertexMinTimeTruthResidualEntries = 0;
@@ -439,6 +445,12 @@ namespace twoelectronhist
     book.recoSpaceSelectedSharedFoilMaxLvsDeltaZ =
       makeGraph("gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ",
                 "Space-selected shared same-foil pair;max(L_{1}, L_{2}) [mm];#Delta z_{reco-truth} [mm]");
+    book.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ =
+      makeGraph("gRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ",
+                "All shared same-foil candidate pairs;(|s|+|t|)/2 [mm];#Delta z_{reco-truth} [mm]");
+    book.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ =
+      makeGraph("gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ",
+                "Space-selected shared same-foil pair;(|s|+|t|)/2 [mm];#Delta z_{reco-truth} [mm]");
     book.testRecoVertexMinTimeX =
       make1D("hTESTRecoTwoElectronVertexMinTimeX",
              "TEST: minimum-|#Delta t| shared ST_Foils reconstructed vertex x;x_{vtx} [mm];entries",
@@ -514,6 +526,9 @@ namespace twoelectronhist
     book.testRecoMinTimeSharedFoilMaxLvsDeltaZ =
       makeGraph("gTESTRecoMinTimeSharedFoilMaxLvsDeltaZ",
                 "TEST: minimum-|#Delta t| shared same-foil pair;max(L_{1}, L_{2}) [mm];#Delta z_{reco-truth} [mm]");
+    book.testRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ =
+      makeGraph("gTESTRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ",
+                "TEST: minimum-|#Delta t| shared same-foil pair;(|s|+|t|)/2 [mm];#Delta z_{reco-truth} [mm]");
     book.testRecoVertexMinTimeLineDistance =
       make1D("hTESTRecoTwoElectronVertexMinTimeLineDistance",
              "TEST: minimum-|#Delta t| shared ST_Foils closest-line distance;line-line distance [mm];entries",
@@ -837,6 +852,69 @@ namespace twoelectronhist
     ++book.testRecoMinTimeSharedFoilMaxLvsDeltaZEntries;
   }
 
+  inline bool validAverageAbsLineParameterVsDeltaZInputs(
+    double averageAbsLineParameter,
+    double recoMinusTruthZ)
+  {
+    return std::isfinite(averageAbsLineParameter) &&
+           std::isfinite(recoMinusTruthZ) &&
+           averageAbsLineParameter >= 0.0;
+  }
+
+  inline void fillRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ(
+    HistogramBook& book,
+    double averageAbsLineParameter,
+    double recoMinusTruthZ)
+  {
+    if (!validAverageAbsLineParameterVsDeltaZInputs(averageAbsLineParameter,
+                                                    recoMinusTruthZ))
+    {
+      return;
+    }
+
+    book.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ->SetPoint(
+      book.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ->GetN(),
+      averageAbsLineParameter,
+      recoMinusTruthZ);
+    ++book.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZEntries;
+  }
+
+  inline void fillRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ(
+    HistogramBook& book,
+    double averageAbsLineParameter,
+    double recoMinusTruthZ)
+  {
+    if (!validAverageAbsLineParameterVsDeltaZInputs(averageAbsLineParameter,
+                                                    recoMinusTruthZ))
+    {
+      return;
+    }
+
+    book.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ->SetPoint(
+      book.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ->GetN(),
+      averageAbsLineParameter,
+      recoMinusTruthZ);
+    ++book.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries;
+  }
+
+  inline void fillRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZTest(
+    HistogramBook& book,
+    double averageAbsLineParameter,
+    double recoMinusTruthZ)
+  {
+    if (!validAverageAbsLineParameterVsDeltaZInputs(averageAbsLineParameter,
+                                                    recoMinusTruthZ))
+    {
+      return;
+    }
+
+    book.testRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ->SetPoint(
+      book.testRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ->GetN(),
+      averageAbsLineParameter,
+      recoMinusTruthZ);
+    ++book.testRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZEntries;
+  }
+
   inline void fillRecoVertexMinTimeChoiceTest(
     HistogramBook& book,
     const twoparticlevertexer::VertexResult& vertex)
@@ -990,6 +1068,8 @@ namespace twoelectronhist
     writeOne(book.recoVertexMinTimeDifferenceTest);
     writeOne(book.recoAllSharedFoilCandidateMaxLvsDeltaZ);
     writeOne(book.recoSpaceSelectedSharedFoilMaxLvsDeltaZ);
+    writeOne(book.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ);
+    writeOne(book.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ);
     writeOne(book.testRecoVertexMinTimeX);
     writeOne(book.testRecoVertexMinTimeY);
     writeOne(book.testRecoVertexMinTimeZ);
@@ -1000,6 +1080,7 @@ namespace twoelectronhist
     writeOne(book.testRecoVertexMinTimeFoilIndexMatchedXZ);
     writeOne(book.testRecoVertexMinTimeFoilIndexMatchedYZ);
     writeOne(book.testRecoMinTimeSharedFoilMaxLvsDeltaZ);
+    writeOne(book.testRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZ);
     writeOne(book.testRecoVertexMinTimeLineDistance);
     writeOne(book.recoVertexTruthDeltaX);
     writeOne(book.recoVertexTruthDeltaY);

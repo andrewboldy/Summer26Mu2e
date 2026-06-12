@@ -467,7 +467,7 @@ namespace
 
   using SharedSurfaceMatches = vector<SharedSurfaceMatch>;
 
-  enum class SharedFoilMaxLvsDeltaZCategory
+  enum class SharedFoilDeltaZScatterCategory
   {
     kAllCandidatePairs,
     kSpaceSelectedPair,
@@ -524,13 +524,13 @@ namespace
     return sharedSurfaces;
   }
 
-  void fillSharedFoilMaxLvsDeltaZDiagnostic(
+  void fillSharedFoilDeltaZScatterDiagnostics(
     twoelectronhist::HistogramBook& histograms,
     const twoparticlevertexer::VertexResult& vertex,
     const mu2e::TrkSegInfo* firstSegment,
     const mu2e::TrkSegInfo* secondSegment,
     const mu2e::SimInfo& truthOrigin,
-    SharedFoilMaxLvsDeltaZCategory category)
+    SharedFoilDeltaZScatterCategory category)
   {
     if (!vertex.valid || firstSegment == nullptr || secondSegment == nullptr)
     {
@@ -547,32 +547,47 @@ namespace
     const double l1 = (firstSegment->pos - truthOrigin.pos).R();
     const double l2 = (secondSegment->pos - truthOrigin.pos).R();
     const double maxPointTruthDistance = std::max(l1, l2);
+    const double averageAbsLineParameter =
+      0.5 * (std::fabs(vertex.firstLineParameter) +
+             std::fabs(vertex.secondLineParameter));
     const double recoMinusTruthZ = vertex.vertex.z() - truthOrigin.pos.z();
 
     switch (category)
     {
-      case SharedFoilMaxLvsDeltaZCategory::kAllCandidatePairs:
+      case SharedFoilDeltaZScatterCategory::kAllCandidatePairs:
         twoelectronhist::fillRecoAllSharedFoilCandidateMaxLvsDeltaZ(
           histograms,
           maxPointTruthDistance,
           recoMinusTruthZ);
+        twoelectronhist::fillRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ(
+          histograms,
+          averageAbsLineParameter,
+          recoMinusTruthZ);
         break;
-      case SharedFoilMaxLvsDeltaZCategory::kSpaceSelectedPair:
+      case SharedFoilDeltaZScatterCategory::kSpaceSelectedPair:
         twoelectronhist::fillRecoSpaceSelectedSharedFoilMaxLvsDeltaZ(
           histograms,
           maxPointTruthDistance,
           recoMinusTruthZ);
+        twoelectronhist::fillRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ(
+          histograms,
+          averageAbsLineParameter,
+          recoMinusTruthZ);
         break;
-      case SharedFoilMaxLvsDeltaZCategory::kMinTimeSelectedPair:
+      case SharedFoilDeltaZScatterCategory::kMinTimeSelectedPair:
         twoelectronhist::fillRecoMinTimeSharedFoilMaxLvsDeltaZTest(
           histograms,
           maxPointTruthDistance,
+          recoMinusTruthZ);
+        twoelectronhist::fillRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZTest(
+          histograms,
+          averageAbsLineParameter,
           recoMinusTruthZ);
         break;
     }
   }
 
-  void fillAllSharedFoilCandidateMaxLvsDeltaZDiagnostics(
+  void fillAllSharedFoilCandidateDeltaZScatterDiagnostics(
     twoelectronhist::HistogramBook& histograms,
     const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
     size_t firstTrackIndex,
@@ -616,13 +631,13 @@ namespace
 
       const auto candidateVertex =
         twoparticlevertexer::vertexFromParticleStates(firstState, secondState);
-      fillSharedFoilMaxLvsDeltaZDiagnostic(
+      fillSharedFoilDeltaZScatterDiagnostics(
         histograms,
         candidateVertex,
         &firstSharedSegment,
         &secondSharedSegment,
         truthOrigin,
-        SharedFoilMaxLvsDeltaZCategory::kAllCandidatePairs);
+        SharedFoilDeltaZScatterCategory::kAllCandidatePairs);
     }
   }
 
@@ -1320,7 +1335,7 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
 
       if (truthOrigin != nullptr && vertexWasAttempted)
       {
-        fillAllSharedFoilCandidateMaxLvsDeltaZDiagnostics(
+        fillAllSharedFoilCandidateDeltaZScatterDiagnostics(
           histograms,
           trackSegments,
           firstVertexTrackIndex,
@@ -1358,13 +1373,13 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
         {
           const XYZVectorF truthToReco = selectedPairVertex.vertex - truthOrigin->pos;
           twoelectronhist::fillRecoVertexTruthResidual(histograms, truthToReco);
-          fillSharedFoilMaxLvsDeltaZDiagnostic(
+          fillSharedFoilDeltaZScatterDiagnostics(
             histograms,
             selectedPairVertex,
             firstVertexSegment,
             secondVertexSegment,
             *truthOrigin,
-            SharedFoilMaxLvsDeltaZCategory::kSpaceSelectedPair);
+            SharedFoilDeltaZScatterCategory::kSpaceSelectedPair);
 
           if (selectedPairVertexFoilCheck.valid &&
               selectedPairVertexFoilCheck.matchesSharedFoilIndex)
@@ -1400,13 +1415,13 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
           twoelectronhist::fillRecoVertexMinTimeTruthResidualTest(
             histograms,
             truthToReco);
-          fillSharedFoilMaxLvsDeltaZDiagnostic(
+          fillSharedFoilDeltaZScatterDiagnostics(
             histograms,
             timeSelectedPairVertex,
             firstTimeVertexSegment,
             secondTimeVertexSegment,
             *truthOrigin,
-            SharedFoilMaxLvsDeltaZCategory::kMinTimeSelectedPair);
+            SharedFoilDeltaZScatterCategory::kMinTimeSelectedPair);
 
           if (timeSelectedPairVertexFoilCheck.valid &&
               timeSelectedPairVertexFoilCheck.matchesSharedFoilIndex)
@@ -1584,6 +1599,10 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.recoAllSharedFoilCandidateMaxLvsDeltaZEntries << endl;
   cout << "  scatter space-selected shared same-foil max(L1,L2) vs delta-z points: "
        << histograms.recoSpaceSelectedSharedFoilMaxLvsDeltaZEntries << endl;
+  cout << "  scatter all shared same-foil candidate pair (|s|+|t|)/2 vs delta-z points: "
+       << histograms.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZEntries << endl;
+  cout << "  scatter space-selected shared same-foil (|s|+|t|)/2 vs delta-z points: "
+       << histograms.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries << endl;
   cout << "  histogram TEST minimum-time reconstructed vertex entries: "
        << histograms.testRecoVertexMinTimeEntries << endl;
   cout << "  histogram TEST foil-index matched minimum-time reconstructed vertex map entries: "
@@ -1596,6 +1615,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.testRecoVertexMinTimeFoilIndexMatchedTruthResidualEntries << endl;
   cout << "  scatter TEST minimum-time shared same-foil max(L1,L2) vs delta-z points: "
        << histograms.testRecoMinTimeSharedFoilMaxLvsDeltaZEntries << endl;
+  cout << "  scatter TEST minimum-time shared same-foil (|s|+|t|)/2 vs delta-z points: "
+       << histograms.testRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZEntries << endl;
   if (WRITE_HISTOGRAM_FILE)
   {
     cout << "  histogram output file: "
