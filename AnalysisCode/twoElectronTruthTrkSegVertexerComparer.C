@@ -47,6 +47,10 @@
 //   parallel TEST histogram set is also filled for the shared ST_Foils surface
 //   pair with the smallest absolute time difference.  MC truth histograms are
 //   filled only from trkmcsim particles that are rank 0 downstream electrons:
+//   The summary also compares each constructed vertex z position with the
+//   nearest configured stopping-target foil center and reports whether that
+//   geometry-nearest foil index matches the shared ST_Foils sindex used to
+//   build the vertex.
 //
 //       sim.valid
 //       sim.rank == 0
@@ -161,6 +165,18 @@ namespace
     "twoElectronTruthTrkSegVertexerComparer_histograms.root";
   static const char* HISTOGRAM_PLOT_OUTPUT_DIR = "Plots/TruthVsRecoPlots";
 
+  // Current 37-foil stopping-target geometry used by the recent run-1/phase-1
+  // geometry files:
+  //   Offline/Mu2eG4/geom/stoppingTargetHoles_v02.txt
+  //   Offline/Mu2eG4/geom/stoppingTargetHoles_DOE_review_2017.txt
+  //
+  // EventNtuple TrkSegInfo positions are in detector coordinates, so the
+  // Mu2e-coordinate foil centers are shifted by the detector-system z origin.
+  static const int CURRENT_ST_GEOMETRY_N_FOILS = 37;
+  static const double CURRENT_ST_GEOMETRY_Z0_IN_MU2E = 5871.0;
+  static const double CURRENT_ST_GEOMETRY_DELTA_Z = 22.222222;
+  static const double CURRENT_ST_GEOMETRY_DETECTOR_SYSTEM_Z0_IN_MU2E = 10171.0;
+
   //============================================================================
   // Input Helpers
   //============================================================================
@@ -258,6 +274,187 @@ namespace
     ostringstream out;
     out << "(" << vector.x() << ", " << vector.y() << ", " << vector.z() << ")";
     return out.str();
+  }
+
+  struct GeometryFoilMatch
+  {
+    bool valid = false;
+    int foilIndex = -1;
+    double foilCenterZ = numeric_limits<double>::quiet_NaN();
+    double deltaZ = numeric_limits<double>::quiet_NaN();
+  };
+
+  struct VertexFoilIndexCheck
+  {
+    bool valid = false;
+    bool matchesSharedFoilIndex = false;
+    int vertexNearestFoilIndex = -1;
+    int sharedFoilIndex = -1;
+    double vertexZ = numeric_limits<double>::quiet_NaN();
+    double nearestFoilCenterZ = numeric_limits<double>::quiet_NaN();
+    double vertexMinusFoilCenterZ = numeric_limits<double>::quiet_NaN();
+    string failureReason;
+  };
+
+  const vector<double>& configuredStoppingTargetFoilCentersZ()
+  {
+    static const vector<double> centers = []() {
+      vector<double> result;
+      result.reserve(CURRENT_ST_GEOMETRY_N_FOILS);
+
+      const int n0 = CURRENT_ST_GEOMETRY_N_FOILS / 2;
+      const double offset =
+        (CURRENT_ST_GEOMETRY_N_FOILS % 2 == 1)
+          ? CURRENT_ST_GEOMETRY_Z0_IN_MU2E
+          : CURRENT_ST_GEOMETRY_Z0_IN_MU2E +
+              0.5 * CURRENT_ST_GEOMETRY_DELTA_Z;
+
+      for (int foilIndex = 0;
+           foilIndex < CURRENT_ST_GEOMETRY_N_FOILS;
+           ++foilIndex)
+      {
+        const double foilCenterZInMu2e =
+          offset +
+          static_cast<double>(foilIndex - n0) * CURRENT_ST_GEOMETRY_DELTA_Z;
+        result.push_back(
+          foilCenterZInMu2e -
+          CURRENT_ST_GEOMETRY_DETECTOR_SYSTEM_Z0_IN_MU2E);
+      }
+
+      return result;
+    }();
+
+    return centers;
+  }
+
+  GeometryFoilMatch nearestConfiguredStoppingTargetFoil(double detectorZ)
+  {
+    GeometryFoilMatch match;
+    if (!std::isfinite(detectorZ))
+    {
+      return match;
+    }
+
+    const vector<double>& foilCentersZ = configuredStoppingTargetFoilCentersZ();
+    double bestAbsDeltaZ = numeric_limits<double>::infinity();
+    for (size_t foilIndex = 0; foilIndex < foilCentersZ.size(); ++foilIndex)
+    {
+      const double deltaZ = detectorZ - foilCentersZ.at(foilIndex);
+      const double absDeltaZ = fabs(deltaZ);
+      if (absDeltaZ < bestAbsDeltaZ)
+      {
+        bestAbsDeltaZ = absDeltaZ;
+        match.valid = true;
+        match.foilIndex = static_cast<int>(foilIndex);
+        match.foilCenterZ = foilCentersZ.at(foilIndex);
+        match.deltaZ = deltaZ;
+      }
+    }
+
+    return match;
+  }
+
+  VertexFoilIndexCheck compareVertexToSharedFoilIndex(
+    const twoparticlevertexer::VertexResult& vertex,
+    const mu2e::TrkSegInfo* firstSegment,
+    const mu2e::TrkSegInfo* secondSegment)
+  {
+    VertexFoilIndexCheck check;
+    if (!vertex.valid)
+    {
+      check.failureReason = "vertex is invalid";
+      return check;
+    }
+
+    if (firstSegment == nullptr || secondSegment == nullptr)
+    {
+      check.failureReason = "missing shared ST_Foils segment pointer";
+      return check;
+    }
+
+    if (firstSegment->sid != mu2e::SurfaceIdDetail::ST_Foils ||
+        secondSegment->sid != mu2e::SurfaceIdDetail::ST_Foils)
+    {
+      check.failureReason = "vertex seed segments are not both ST_Foils";
+      return check;
+    }
+
+    if (firstSegment->sindex != secondSegment->sindex)
+    {
+      check.failureReason = "vertex seed segments do not share the same foil sindex";
+      return check;
+    }
+
+    const GeometryFoilMatch nearestFoil =
+      nearestConfiguredStoppingTargetFoil(vertex.vertex.z());
+    if (!nearestFoil.valid)
+    {
+      check.failureReason = "could not match vertex z to configured foil geometry";
+      return check;
+    }
+
+    check.valid = true;
+    check.sharedFoilIndex = firstSegment->sindex;
+    check.vertexNearestFoilIndex = nearestFoil.foilIndex;
+    check.vertexZ = vertex.vertex.z();
+    check.nearestFoilCenterZ = nearestFoil.foilCenterZ;
+    check.vertexMinusFoilCenterZ = nearestFoil.deltaZ;
+    check.matchesSharedFoilIndex =
+      check.vertexNearestFoilIndex == check.sharedFoilIndex;
+    return check;
+  }
+
+  void countVertexFoilIndexCheck(const VertexFoilIndexCheck& check,
+                                 Long64_t& checkedVertices,
+                                 Long64_t& matchingVertices)
+  {
+    if (!check.valid)
+    {
+      return;
+    }
+
+    ++checkedVertices;
+    if (check.matchesSharedFoilIndex)
+    {
+      ++matchingVertices;
+    }
+  }
+
+  void printVertexFoilIndexCheck(const string& label,
+                                 const VertexFoilIndexCheck& check)
+  {
+    cout << "    " << label << " nearest configured foil check: ";
+    if (!check.valid)
+    {
+      cout << "unavailable (" << check.failureReason << ")" << endl;
+      return;
+    }
+
+    cout << "vertex_z=" << check.vertexZ << " mm"
+         << " nearest_geometry_foil_sindex=" << check.vertexNearestFoilIndex
+         << " foil_center_z=" << check.nearestFoilCenterZ << " mm"
+         << " vertex_minus_foil_center_z=" << check.vertexMinusFoilCenterZ
+         << " mm"
+         << " shared_seed_sindex=" << check.sharedFoilIndex
+         << " match="
+         << (check.matchesSharedFoilIndex ? "yes" : "no")
+         << endl;
+  }
+
+  void printVertexFoilIndexSummary(const string& label,
+                                   Long64_t matchingVertices,
+                                   Long64_t checkedVertices)
+  {
+    cout << "  " << label << ": "
+         << matchingVertices << " / " << checkedVertices;
+    if (checkedVertices > 0)
+    {
+      cout << " ("
+           << 100.0 * static_cast<double>(matchingVertices) /
+                static_cast<double>(checkedVertices)
+           << "%)";
+    }
+    cout << endl;
   }
 
   struct SharedSurfaceMatch
@@ -819,6 +1016,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
   Long64_t eventsWithAtLeastTwoCandidateTracks = 0;
   Long64_t totalRecoTracks = 0;
   Long64_t totalCandidateTracks = 0;
+  Long64_t spaceSelectedVertexFoilIndexChecks = 0;
+  Long64_t spaceSelectedVertexFoilIndexMatches = 0;
+  Long64_t timeSelectedVertexFoilIndexChecks = 0;
+  Long64_t timeSelectedVertexFoilIndexMatches = 0;
+  Long64_t histogramSelectedSpaceVertexFoilIndexChecks = 0;
+  Long64_t histogramSelectedSpaceVertexFoilIndexMatches = 0;
+  Long64_t histogramSelectedTimeVertexFoilIndexChecks = 0;
+  Long64_t histogramSelectedTimeVertexFoilIndexMatches = 0;
 
   for (Long64_t entry = 0; entry < entriesToRead; ++entry)
   {
@@ -935,6 +1140,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
     const mu2e::TrkSegInfo* secondTimeVertexSegment = nullptr;
     twoparticlevertexer::VertexResult selectedPairVertex;
     twoparticlevertexer::VertexResult timeSelectedPairVertex;
+    VertexFoilIndexCheck selectedPairVertexFoilCheck;
+    VertexFoilIndexCheck timeSelectedPairVertexFoilCheck;
     size_t firstVertexTrackIndex = 0;
     size_t secondVertexTrackIndex = 0;
 
@@ -958,6 +1165,21 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
           firstTimeVertexSegment,
           secondTimeVertexSegment);
       vertexWasAttempted = true;
+
+      selectedPairVertexFoilCheck =
+        compareVertexToSharedFoilIndex(selectedPairVertex,
+                                       firstVertexSegment,
+                                       secondVertexSegment);
+      timeSelectedPairVertexFoilCheck =
+        compareVertexToSharedFoilIndex(timeSelectedPairVertex,
+                                       firstTimeVertexSegment,
+                                       secondTimeVertexSegment);
+      countVertexFoilIndexCheck(selectedPairVertexFoilCheck,
+                                spaceSelectedVertexFoilIndexChecks,
+                                spaceSelectedVertexFoilIndexMatches);
+      countVertexFoilIndexCheck(timeSelectedPairVertexFoilCheck,
+                                timeSelectedVertexFoilIndexChecks,
+                                timeSelectedVertexFoilIndexMatches);
     }
 
     // Histogram selection:
@@ -972,6 +1194,13 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
     if (candidateTrackDecisions.size() == 2)
     {
       ++histograms.selectedEvents;
+
+      countVertexFoilIndexCheck(selectedPairVertexFoilCheck,
+                                histogramSelectedSpaceVertexFoilIndexChecks,
+                                histogramSelectedSpaceVertexFoilIndexMatches);
+      countVertexFoilIndexCheck(timeSelectedPairVertexFoilCheck,
+                                histogramSelectedTimeVertexFoilIndexChecks,
+                                histogramSelectedTimeVertexFoilIndexMatches);
 
       vector<size_t> selectedTrackIndices;
       selectedTrackIndices.push_back(candidateTrackDecisions.at(0).trackIndex);
@@ -1042,10 +1271,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
                << " closest-line distance=" << selectedPairVertex.distance << " mm"
                << " delta_input_time=" << selectedPairVertex.deltaInputTime << " ns"
                << endl;
+          printVertexFoilIndexCheck("space-selected vertex",
+                                    selectedPairVertexFoilCheck);
         }
         else
         {
           cout << "    vertex unavailable: " << selectedPairVertex.failureReason << endl;
+          printVertexFoilIndexCheck("space-selected vertex",
+                                    selectedPairVertexFoilCheck);
         }
 
         cout << "  twoParticleVertexer preview minimizing |delta_input_time| using selected tracks "
@@ -1060,10 +1293,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
                << " closest-line distance=" << timeSelectedPairVertex.distance << " mm"
                << " delta_input_time=" << timeSelectedPairVertex.deltaInputTime << " ns"
                << endl;
+          printVertexFoilIndexCheck("TEST minimum-time vertex",
+                                    timeSelectedPairVertexFoilCheck);
         }
         else
         {
           cout << "    vertex unavailable: " << timeSelectedPairVertex.failureReason << endl;
+          printVertexFoilIndexCheck("TEST minimum-time vertex",
+                                    timeSelectedPairVertexFoilCheck);
         }
     }
 
@@ -1135,6 +1372,33 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << eventsWithExactlyTwoCandidateTracks << endl;
   cout << "  events with at least two candidate tracks: "
        << eventsWithAtLeastTwoCandidateTracks << endl;
+  const vector<double>& configuredFoilCentersZ =
+    configuredStoppingTargetFoilCentersZ();
+  if (!configuredFoilCentersZ.empty())
+  {
+    cout << "  configured stopping-target foil geometry for vertex-z check: "
+         << configuredFoilCentersZ.size()
+         << " foils, detector z centers ["
+         << configuredFoilCentersZ.front() << ", "
+         << configuredFoilCentersZ.back() << "] mm, spacing "
+         << CURRENT_ST_GEOMETRY_DELTA_Z << " mm" << endl;
+  }
+  printVertexFoilIndexSummary(
+    "constructed first-two-candidate space vertex foil-index matches",
+    spaceSelectedVertexFoilIndexMatches,
+    spaceSelectedVertexFoilIndexChecks);
+  printVertexFoilIndexSummary(
+    "constructed first-two-candidate TEST minimum-time vertex foil-index matches",
+    timeSelectedVertexFoilIndexMatches,
+    timeSelectedVertexFoilIndexChecks);
+  printVertexFoilIndexSummary(
+    "histogram-selected exactly-two-candidate space vertex foil-index matches",
+    histogramSelectedSpaceVertexFoilIndexMatches,
+    histogramSelectedSpaceVertexFoilIndexChecks);
+  printVertexFoilIndexSummary(
+    "histogram-selected exactly-two-candidate TEST minimum-time vertex foil-index matches",
+    histogramSelectedTimeVertexFoilIndexMatches,
+    histogramSelectedTimeVertexFoilIndexChecks);
   cout << "  histogram-selected events, exactly two candidate tracks: "
        << histograms.selectedEvents << endl;
   cout << "  histogram MC truth entries, rank-0 downstream e-: "
