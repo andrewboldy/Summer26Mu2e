@@ -137,6 +137,7 @@ namespace twoelectronhist
     TH1F* recoVertexLineParameterT = nullptr;
     TH1F* recoVertexAbsLineParameterS = nullptr;
     TH1F* recoVertexAbsLineParameterT = nullptr;
+    TH2F* recoVertexLineParameterST = nullptr;
     TH2F* recoVertexAbsLineParameterST = nullptr;
     TH1F* recoVertexSelectedSegmentDeltaTTest = nullptr;
     TH1F* recoVertexMinTimeDifferenceTest = nullptr;
@@ -402,6 +403,15 @@ namespace twoelectronhist
              config.absLineParameterBins,
              config.absLineParameterMin,
              config.absLineParameterMax);
+    book.recoVertexLineParameterST =
+      make2D("hRecoTwoElectronVertexLineParameterST",
+             "Selected two-track closest-approach line parameters;s [mm];t [mm]",
+             config.lineParameterBins,
+             config.lineParameterMin,
+             config.lineParameterMax,
+             config.lineParameterBins,
+             config.lineParameterMin,
+             config.lineParameterMax);
     book.recoVertexAbsLineParameterST =
       make2D("hRecoTwoElectronVertexAbsLineParameterST",
              "Selected two-track closest-approach absolute line parameters;|s| [mm];|t| [mm]",
@@ -718,6 +728,7 @@ namespace twoelectronhist
       book.recoVertexLineParameterT->Fill(lineParameterT);
       book.recoVertexAbsLineParameterS->Fill(absLineParameterS);
       book.recoVertexAbsLineParameterT->Fill(absLineParameterT);
+      book.recoVertexLineParameterST->Fill(lineParameterS, lineParameterT);
       book.recoVertexAbsLineParameterST->Fill(absLineParameterS,
                                               absLineParameterT);
       ++book.recoVertexLineParameterEntries;
@@ -973,6 +984,7 @@ namespace twoelectronhist
     writeOne(book.recoVertexLineParameterT);
     writeOne(book.recoVertexAbsLineParameterS);
     writeOne(book.recoVertexAbsLineParameterT);
+    writeOne(book.recoVertexLineParameterST);
     writeOne(book.recoVertexAbsLineParameterST);
     writeOne(book.recoVertexSelectedSegmentDeltaTTest);
     writeOne(book.recoVertexMinTimeDifferenceTest);
