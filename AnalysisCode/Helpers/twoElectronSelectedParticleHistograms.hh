@@ -55,6 +55,7 @@
 #include <vector>
 
 #include <TFile.h>
+#include <TGraph.h>
 #include <TH1.h>
 #include <TH1F.h>
 #include <TH2F.h>
@@ -93,6 +94,11 @@ namespace twoelectronhist
     int timeDifferenceBins = 200;
     double timeDifferenceMin = -250.0;
     double timeDifferenceMax = 250.0;
+
+    double foilPointTruthDistanceMin = 0.0;
+    double foilPointTruthDistanceMax = 1000.0;
+    double recoTruthDeltaZMin = -1000.0;
+    double recoTruthDeltaZMax = 1000.0;
   };
 
   struct HistogramBook
@@ -122,6 +128,8 @@ namespace twoelectronhist
     TH1F* recoVertexLineDistance = nullptr;
     TH1F* recoVertexSelectedSegmentDeltaTTest = nullptr;
     TH1F* recoVertexMinTimeDifferenceTest = nullptr;
+    TGraph* recoAllSharedFoilCandidateMaxLvsDeltaZ = nullptr;
+    TGraph* recoSpaceSelectedSharedFoilMaxLvsDeltaZ = nullptr;
     TH1F* testRecoVertexMinTimeX = nullptr;
     TH1F* testRecoVertexMinTimeY = nullptr;
     TH1F* testRecoVertexMinTimeZ = nullptr;
@@ -131,6 +139,7 @@ namespace twoelectronhist
     TH2F* testRecoVertexMinTimeFoilIndexMatchedXY = nullptr;
     TH2F* testRecoVertexMinTimeFoilIndexMatchedXZ = nullptr;
     TH2F* testRecoVertexMinTimeFoilIndexMatchedYZ = nullptr;
+    TGraph* testRecoMinTimeSharedFoilMaxLvsDeltaZ = nullptr;
     TH1F* testRecoVertexMinTimeLineDistance = nullptr;
     TH1F* recoVertexTruthDeltaX = nullptr;
     TH1F* recoVertexTruthDeltaY = nullptr;
@@ -156,8 +165,11 @@ namespace twoelectronhist
     Long64_t recoVertexFoilIndexMatchedEntries = 0;
     Long64_t recoVertexSelectedSegmentDeltaTEntries = 0;
     Long64_t recoVertexMinTimeDifferenceEntries = 0;
+    Long64_t recoAllSharedFoilCandidateMaxLvsDeltaZEntries = 0;
+    Long64_t recoSpaceSelectedSharedFoilMaxLvsDeltaZEntries = 0;
     Long64_t testRecoVertexMinTimeEntries = 0;
     Long64_t testRecoVertexMinTimeFoilIndexMatchedEntries = 0;
+    Long64_t testRecoMinTimeSharedFoilMaxLvsDeltaZEntries = 0;
     Long64_t recoVertexTruthResidualEntries = 0;
     Long64_t recoVertexFoilIndexMatchedTruthResidualEntries = 0;
     Long64_t testRecoVertexMinTimeTruthResidualEntries = 0;
@@ -194,6 +206,15 @@ namespace twoelectronhist
                               yMax);
     histogram->SetDirectory(nullptr);
     return histogram;
+  }
+
+  inline TGraph* makeGraph(const std::string& name,
+                           const std::string& title)
+  {
+    TGraph* graph = new TGraph();
+    graph->SetName(name.c_str());
+    graph->SetTitle(title.c_str());
+    return graph;
   }
 
   inline HistogramBook bookHistograms(const HistogramConfig& config = HistogramConfig())
@@ -356,6 +377,12 @@ namespace twoelectronhist
              config.timeDifferenceBins,
              config.timeDifferenceMin,
              config.timeDifferenceMax);
+    book.recoAllSharedFoilCandidateMaxLvsDeltaZ =
+      makeGraph("gRecoAllSharedFoilCandidateMaxLvsDeltaZ",
+                "All shared same-foil candidate pairs;max(L_{1}, L_{2}) [mm];#Delta z_{reco-truth} [mm]");
+    book.recoSpaceSelectedSharedFoilMaxLvsDeltaZ =
+      makeGraph("gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ",
+                "Space-selected shared same-foil pair;max(L_{1}, L_{2}) [mm];#Delta z_{reco-truth} [mm]");
     book.testRecoVertexMinTimeX =
       make1D("hTESTRecoTwoElectronVertexMinTimeX",
              "TEST: minimum-|#Delta t| shared ST_Foils reconstructed vertex x;x_{vtx} [mm];entries",
@@ -428,6 +455,9 @@ namespace twoelectronhist
              config.zBins,
              config.zMin,
              config.zMax);
+    book.testRecoMinTimeSharedFoilMaxLvsDeltaZ =
+      makeGraph("gTESTRecoMinTimeSharedFoilMaxLvsDeltaZ",
+                "TEST: minimum-|#Delta t| shared same-foil pair;max(L_{1}, L_{2}) [mm];#Delta z_{reco-truth} [mm]");
     book.testRecoVertexMinTimeLineDistance =
       make1D("hTESTRecoTwoElectronVertexMinTimeLineDistance",
              "TEST: minimum-|#Delta t| shared ST_Foils closest-line distance;line-line distance [mm];entries",
@@ -675,6 +705,65 @@ namespace twoelectronhist
     ++book.recoVertexMinTimeDifferenceEntries;
   }
 
+  inline bool validMaxLvsDeltaZInputs(double maxPointTruthDistance,
+                                      double recoMinusTruthZ)
+  {
+    return std::isfinite(maxPointTruthDistance) &&
+           std::isfinite(recoMinusTruthZ) &&
+           maxPointTruthDistance >= 0.0;
+  }
+
+  inline void fillRecoAllSharedFoilCandidateMaxLvsDeltaZ(
+    HistogramBook& book,
+    double maxPointTruthDistance,
+    double recoMinusTruthZ)
+  {
+    if (!validMaxLvsDeltaZInputs(maxPointTruthDistance, recoMinusTruthZ))
+    {
+      return;
+    }
+
+    book.recoAllSharedFoilCandidateMaxLvsDeltaZ->SetPoint(
+      book.recoAllSharedFoilCandidateMaxLvsDeltaZ->GetN(),
+      maxPointTruthDistance,
+      recoMinusTruthZ);
+    ++book.recoAllSharedFoilCandidateMaxLvsDeltaZEntries;
+  }
+
+  inline void fillRecoSpaceSelectedSharedFoilMaxLvsDeltaZ(
+    HistogramBook& book,
+    double maxPointTruthDistance,
+    double recoMinusTruthZ)
+  {
+    if (!validMaxLvsDeltaZInputs(maxPointTruthDistance, recoMinusTruthZ))
+    {
+      return;
+    }
+
+    book.recoSpaceSelectedSharedFoilMaxLvsDeltaZ->SetPoint(
+      book.recoSpaceSelectedSharedFoilMaxLvsDeltaZ->GetN(),
+      maxPointTruthDistance,
+      recoMinusTruthZ);
+    ++book.recoSpaceSelectedSharedFoilMaxLvsDeltaZEntries;
+  }
+
+  inline void fillRecoMinTimeSharedFoilMaxLvsDeltaZTest(
+    HistogramBook& book,
+    double maxPointTruthDistance,
+    double recoMinusTruthZ)
+  {
+    if (!validMaxLvsDeltaZInputs(maxPointTruthDistance, recoMinusTruthZ))
+    {
+      return;
+    }
+
+    book.testRecoMinTimeSharedFoilMaxLvsDeltaZ->SetPoint(
+      book.testRecoMinTimeSharedFoilMaxLvsDeltaZ->GetN(),
+      maxPointTruthDistance,
+      recoMinusTruthZ);
+    ++book.testRecoMinTimeSharedFoilMaxLvsDeltaZEntries;
+  }
+
   inline void fillRecoVertexMinTimeChoiceTest(
     HistogramBook& book,
     const twoparticlevertexer::VertexResult& vertex)
@@ -780,6 +869,14 @@ namespace twoelectronhist
     }
   }
 
+  inline void writeOne(TGraph* graph)
+  {
+    if (graph != nullptr)
+    {
+      graph->Write();
+    }
+  }
+
   inline bool writeHistograms(HistogramBook& book, const std::string& outputName)
   {
     TFile* outputFile = TFile::Open(outputName.c_str(), "RECREATE");
@@ -812,6 +909,8 @@ namespace twoelectronhist
     writeOne(book.recoVertexLineDistance);
     writeOne(book.recoVertexSelectedSegmentDeltaTTest);
     writeOne(book.recoVertexMinTimeDifferenceTest);
+    writeOne(book.recoAllSharedFoilCandidateMaxLvsDeltaZ);
+    writeOne(book.recoSpaceSelectedSharedFoilMaxLvsDeltaZ);
     writeOne(book.testRecoVertexMinTimeX);
     writeOne(book.testRecoVertexMinTimeY);
     writeOne(book.testRecoVertexMinTimeZ);
@@ -821,6 +920,7 @@ namespace twoelectronhist
     writeOne(book.testRecoVertexMinTimeFoilIndexMatchedXY);
     writeOne(book.testRecoVertexMinTimeFoilIndexMatchedXZ);
     writeOne(book.testRecoVertexMinTimeFoilIndexMatchedYZ);
+    writeOne(book.testRecoMinTimeSharedFoilMaxLvsDeltaZ);
     writeOne(book.testRecoVertexMinTimeLineDistance);
     writeOne(book.recoVertexTruthDeltaX);
     writeOne(book.recoVertexTruthDeltaY);

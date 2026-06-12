@@ -467,6 +467,13 @@ namespace
 
   using SharedSurfaceMatches = vector<SharedSurfaceMatch>;
 
+  enum class SharedFoilMaxLvsDeltaZCategory
+  {
+    kAllCandidatePairs,
+    kSpaceSelectedPair,
+    kMinTimeSelectedPair
+  };
+
   SharedSurfaceMatches sharedSurfacesBetweenTracks(
     const vector<mu2e::TrkSegInfo>& firstTrackSegments,
     const vector<mu2e::TrkSegInfo>& secondTrackSegments)
@@ -515,6 +522,108 @@ namespace
     }
 
     return sharedSurfaces;
+  }
+
+  void fillSharedFoilMaxLvsDeltaZDiagnostic(
+    twoelectronhist::HistogramBook& histograms,
+    const twoparticlevertexer::VertexResult& vertex,
+    const mu2e::TrkSegInfo* firstSegment,
+    const mu2e::TrkSegInfo* secondSegment,
+    const mu2e::SimInfo& truthOrigin,
+    SharedFoilMaxLvsDeltaZCategory category)
+  {
+    if (!vertex.valid || firstSegment == nullptr || secondSegment == nullptr)
+    {
+      return;
+    }
+
+    if (firstSegment->sid != mu2e::SurfaceIdDetail::ST_Foils ||
+        secondSegment->sid != mu2e::SurfaceIdDetail::ST_Foils ||
+        firstSegment->sindex != secondSegment->sindex)
+    {
+      return;
+    }
+
+    const double l1 = (firstSegment->pos - truthOrigin.pos).R();
+    const double l2 = (secondSegment->pos - truthOrigin.pos).R();
+    const double maxPointTruthDistance = std::max(l1, l2);
+    const double recoMinusTruthZ = vertex.vertex.z() - truthOrigin.pos.z();
+
+    switch (category)
+    {
+      case SharedFoilMaxLvsDeltaZCategory::kAllCandidatePairs:
+        twoelectronhist::fillRecoAllSharedFoilCandidateMaxLvsDeltaZ(
+          histograms,
+          maxPointTruthDistance,
+          recoMinusTruthZ);
+        break;
+      case SharedFoilMaxLvsDeltaZCategory::kSpaceSelectedPair:
+        twoelectronhist::fillRecoSpaceSelectedSharedFoilMaxLvsDeltaZ(
+          histograms,
+          maxPointTruthDistance,
+          recoMinusTruthZ);
+        break;
+      case SharedFoilMaxLvsDeltaZCategory::kMinTimeSelectedPair:
+        twoelectronhist::fillRecoMinTimeSharedFoilMaxLvsDeltaZTest(
+          histograms,
+          maxPointTruthDistance,
+          recoMinusTruthZ);
+        break;
+    }
+  }
+
+  void fillAllSharedFoilCandidateMaxLvsDeltaZDiagnostics(
+    twoelectronhist::HistogramBook& histograms,
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t firstTrackIndex,
+    size_t secondTrackIndex,
+    const mu2e::SimInfo& truthOrigin)
+  {
+    if (trackSegments == nullptr ||
+        firstTrackIndex >= trackSegments->size() ||
+        secondTrackIndex >= trackSegments->size())
+    {
+      return;
+    }
+
+    const auto& firstTrackSegments = trackSegments->at(firstTrackIndex);
+    const auto& secondTrackSegments = trackSegments->at(secondTrackIndex);
+    const SharedSurfaceMatches sharedSurfaces =
+      sharedSurfacesBetweenTracks(firstTrackSegments, secondTrackSegments);
+
+    for (const auto& sharedSurface : sharedSurfaces)
+    {
+      if (sharedSurface.sid != mu2e::SurfaceIdDetail::ST_Foils)
+      {
+        continue;
+      }
+
+      const auto& firstSharedSegment =
+        firstTrackSegments.at(sharedSurface.firstStoredSegmentIndex);
+      const auto& secondSharedSegment =
+        secondTrackSegments.at(sharedSurface.secondStoredSegmentIndex);
+
+      const auto firstState =
+        twoparticlevertexer::makeParticleStateFromTrackSegment(
+          firstSharedSegment,
+          static_cast<int>(firstTrackIndex),
+          "first selected reco track shared-foil candidate");
+      const auto secondState =
+        twoparticlevertexer::makeParticleStateFromTrackSegment(
+          secondSharedSegment,
+          static_cast<int>(secondTrackIndex),
+          "second selected reco track shared-foil candidate");
+
+      const auto candidateVertex =
+        twoparticlevertexer::vertexFromParticleStates(firstState, secondState);
+      fillSharedFoilMaxLvsDeltaZDiagnostic(
+        histograms,
+        candidateVertex,
+        &firstSharedSegment,
+        &secondSharedSegment,
+        truthOrigin,
+        SharedFoilMaxLvsDeltaZCategory::kAllCandidatePairs);
+    }
   }
 
   //============================================================================
@@ -1209,6 +1318,16 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
       const mu2e::SimInfo* truthOrigin =
         findRepresentativeTruthOrigin(truthSimByTrack, selectedTrackIndices, 11);
 
+      if (truthOrigin != nullptr && vertexWasAttempted)
+      {
+        fillAllSharedFoilCandidateMaxLvsDeltaZDiagnostics(
+          histograms,
+          trackSegments,
+          firstVertexTrackIndex,
+          secondVertexTrackIndex,
+          *truthOrigin);
+      }
+
       twoelectronhist::fillRankZeroDownstreamElectronTruthFromSelectedTracks(
         histograms,
         truthSimByTrack,
@@ -1239,6 +1358,13 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
         {
           const XYZVectorF truthToReco = selectedPairVertex.vertex - truthOrigin->pos;
           twoelectronhist::fillRecoVertexTruthResidual(histograms, truthToReco);
+          fillSharedFoilMaxLvsDeltaZDiagnostic(
+            histograms,
+            selectedPairVertex,
+            firstVertexSegment,
+            secondVertexSegment,
+            *truthOrigin,
+            SharedFoilMaxLvsDeltaZCategory::kSpaceSelectedPair);
 
           if (selectedPairVertexFoilCheck.valid &&
               selectedPairVertexFoilCheck.matchesSharedFoilIndex)
@@ -1274,6 +1400,13 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
           twoelectronhist::fillRecoVertexMinTimeTruthResidualTest(
             histograms,
             truthToReco);
+          fillSharedFoilMaxLvsDeltaZDiagnostic(
+            histograms,
+            timeSelectedPairVertex,
+            firstTimeVertexSegment,
+            secondTimeVertexSegment,
+            *truthOrigin,
+            SharedFoilMaxLvsDeltaZCategory::kMinTimeSelectedPair);
 
           if (timeSelectedPairVertexFoilCheck.valid &&
               timeSelectedPairVertexFoilCheck.matchesSharedFoilIndex)
@@ -1445,6 +1578,10 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.recoVertexTruthResidualEntries << endl;
   cout << "  histogram foil-index matched reconstructed-vs-truth vertex residual entries: "
        << histograms.recoVertexFoilIndexMatchedTruthResidualEntries << endl;
+  cout << "  scatter all shared same-foil candidate pair max(L1,L2) vs delta-z points: "
+       << histograms.recoAllSharedFoilCandidateMaxLvsDeltaZEntries << endl;
+  cout << "  scatter space-selected shared same-foil max(L1,L2) vs delta-z points: "
+       << histograms.recoSpaceSelectedSharedFoilMaxLvsDeltaZEntries << endl;
   cout << "  histogram TEST minimum-time reconstructed vertex entries: "
        << histograms.testRecoVertexMinTimeEntries << endl;
   cout << "  histogram TEST foil-index matched minimum-time reconstructed vertex map entries: "
@@ -1455,6 +1592,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.testRecoVertexMinTimeTruthResidualEntries << endl;
   cout << "  histogram TEST foil-index matched minimum-time reconstructed-vs-truth vertex residual entries: "
        << histograms.testRecoVertexMinTimeFoilIndexMatchedTruthResidualEntries << endl;
+  cout << "  scatter TEST minimum-time shared same-foil max(L1,L2) vs delta-z points: "
+       << histograms.testRecoMinTimeSharedFoilMaxLvsDeltaZEntries << endl;
   if (WRITE_HISTOGRAM_FILE)
   {
     cout << "  histogram output file: "

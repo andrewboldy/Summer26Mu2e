@@ -27,8 +27,10 @@
 #include <iostream>
 
 #include <TCanvas.h>
+#include <TAxis.h>
 #include <TBox.h>
 #include <TFile.h>
+#include <TGraph.h>
 #include <TH1.h>
 #include <TH1F.h>
 #include <TH2F.h>
@@ -41,6 +43,10 @@ namespace twoelectronplots
   constexpr double kStoppingTargetOuterRadius = 75.0;
   constexpr double kStoppingTargetZMin = -4700.053;
   constexpr double kStoppingTargetZMax = -3899.947;
+  constexpr double kFoilPointTruthDistancePlotMin = 0.0;
+  constexpr double kFoilPointTruthDistancePlotMax = 1000.0;
+  constexpr double kRecoTruthDeltaZPlotMin = -1000.0;
+  constexpr double kRecoTruthDeltaZPlotMax = 1000.0;
 
   inline void ensureOutputDirectory(const std::string& outputPath)
   {
@@ -65,6 +71,11 @@ namespace twoelectronplots
   inline TH2F* get2DHistogram(TFile& file, const std::string& name)
   {
     return dynamic_cast<TH2F*>(file.Get(name.c_str()));
+  }
+
+  inline TGraph* getGraph(TFile& file, const std::string& name)
+  {
+    return dynamic_cast<TGraph*>(file.Get(name.c_str()));
   }
 
   inline void style1DHistogram(TH1* histogram)
@@ -92,6 +103,50 @@ namespace twoelectronplots
     }
     histogram->SetStats(false);
     histogram->Draw("COLZ");
+  }
+
+  inline void styleScatterGraph(TGraph* graph, Color_t color)
+  {
+    if (graph == nullptr)
+    {
+      return;
+    }
+
+    graph->SetMarkerStyle(20);
+    graph->SetMarkerSize(0.65);
+    graph->SetMarkerColor(color);
+    graph->SetLineColor(color);
+  }
+
+  inline void drawScatterGraph(TGraph* graph,
+                               double xMin,
+                               double xMax,
+                               double yMin,
+                               double yMax)
+  {
+    if (graph == nullptr)
+    {
+      return;
+    }
+
+    if (gPad != nullptr)
+    {
+      gPad->SetGridx();
+      gPad->SetGridy();
+    }
+
+    graph->SetMinimum(yMin);
+    graph->SetMaximum(yMax);
+    graph->Draw("AP");
+    if (graph->GetXaxis() != nullptr)
+    {
+      graph->GetXaxis()->SetLimits(xMin, xMax);
+    }
+    if (gPad != nullptr)
+    {
+      gPad->Modified();
+      gPad->Update();
+    }
   }
 
   inline void drawStoppingTargetBoxXY()
@@ -207,6 +262,12 @@ namespace twoelectronplots
     TH1F* hRecoVertexMinTimeDifferenceTest = get1DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeDifference");
+    TGraph* gRecoAllSharedFoilCandidateMaxLvsDeltaZ = getGraph(
+      *histogramFile,
+      "gRecoAllSharedFoilCandidateMaxLvsDeltaZ");
+    TGraph* gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ = getGraph(
+      *histogramFile,
+      "gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ");
     TH1F* hTestRecoVertexMinTimeX = get1DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeX");
@@ -234,6 +295,9 @@ namespace twoelectronplots
     TH2F* hTestRecoVertexMinTimeFoilIndexMatchedYZ = get2DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeFoilIndexMatchedYZ");
+    TGraph* gTestRecoMinTimeSharedFoilMaxLvsDeltaZ = getGraph(
+      *histogramFile,
+      "gTESTRecoMinTimeSharedFoilMaxLvsDeltaZ");
     TH1F* hTestRecoVertexMinTimeDistance = get1DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeLineDistance");
@@ -281,6 +345,8 @@ namespace twoelectronplots
         hRecoVertexFoilIndexMatchedTruthDistance == nullptr ||
         hRecoVertexSelectedSegmentDeltaTTest == nullptr ||
         hRecoVertexMinTimeDifferenceTest == nullptr ||
+        gRecoAllSharedFoilCandidateMaxLvsDeltaZ == nullptr ||
+        gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ == nullptr ||
         hTestRecoVertexMinTimeX == nullptr ||
         hTestRecoVertexMinTimeY == nullptr ||
         hTestRecoVertexMinTimeZ == nullptr ||
@@ -290,6 +356,7 @@ namespace twoelectronplots
         hTestRecoVertexMinTimeFoilIndexMatchedXY == nullptr ||
         hTestRecoVertexMinTimeFoilIndexMatchedXZ == nullptr ||
         hTestRecoVertexMinTimeFoilIndexMatchedYZ == nullptr ||
+        gTestRecoMinTimeSharedFoilMaxLvsDeltaZ == nullptr ||
         hTestRecoVertexMinTimeDistance == nullptr ||
         hTestRecoVertexMinTimeTruthDeltaX == nullptr ||
         hTestRecoVertexMinTimeTruthDeltaY == nullptr ||
@@ -300,7 +367,7 @@ namespace twoelectronplots
         hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ == nullptr ||
         hTestRecoVertexMinTimeFoilIndexMatchedTruthDistance == nullptr)
     {
-      std::cerr << "ERROR: one or more expected histograms are missing from "
+      std::cerr << "ERROR: one or more expected plot objects are missing from "
                 << histogramFileName << std::endl;
       histogramFile->Close();
       delete histogramFile;
@@ -327,6 +394,8 @@ namespace twoelectronplots
     style1DHistogram(hRecoVertexFoilIndexMatchedTruthDistance);
     style1DHistogram(hRecoVertexSelectedSegmentDeltaTTest);
     style1DHistogram(hRecoVertexMinTimeDifferenceTest);
+    styleScatterGraph(gRecoAllSharedFoilCandidateMaxLvsDeltaZ, kBlue + 1);
+    styleScatterGraph(gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ, kGreen + 2);
     style1DHistogram(hTestRecoVertexMinTimeX);
     style1DHistogram(hTestRecoVertexMinTimeY);
     style1DHistogram(hTestRecoVertexMinTimeZ);
@@ -339,6 +408,7 @@ namespace twoelectronplots
     style1DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaY);
     style1DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ);
     style1DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedTruthDistance);
+    styleScatterGraph(gTestRecoMinTimeSharedFoilMaxLvsDeltaZ, kMagenta + 2);
 
     TCanvas cTruthOrigin("cTruthOrigin",
                          "MC truth rank-0 downstream electron origin",
@@ -454,6 +524,45 @@ namespace twoelectronplots
     hRecoVertexMinTimeDifferenceTest->Draw("HIST E");
     cRecoVertexMinTimeDifferenceTest.SaveAs(
       (outputDirectory + "/RecoVertexMinTimeDifference_TEST.pdf").c_str());
+
+    TCanvas cRecoAllSharedFoilMaxLvsDeltaZ(
+      "cRecoAllSharedFoilMaxLvsDeltaZ",
+      "All shared same-foil candidate pairs: #Delta z vs max(L_{1}, L_{2})",
+      900,
+      700);
+    drawScatterGraph(gRecoAllSharedFoilCandidateMaxLvsDeltaZ,
+                     kFoilPointTruthDistancePlotMin,
+                     kFoilPointTruthDistancePlotMax,
+                     kRecoTruthDeltaZPlotMin,
+                     kRecoTruthDeltaZPlotMax);
+    cRecoAllSharedFoilMaxLvsDeltaZ.SaveAs(
+      (outputDirectory + "/RecoAllSharedFoilCandidateMaxLvsDeltaZ_Scatter.pdf").c_str());
+
+    TCanvas cRecoSpaceSelectedMaxLvsDeltaZ(
+      "cRecoSpaceSelectedMaxLvsDeltaZ",
+      "Space-selected shared same-foil pair: #Delta z vs max(L_{1}, L_{2})",
+      900,
+      700);
+    drawScatterGraph(gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ,
+                     kFoilPointTruthDistancePlotMin,
+                     kFoilPointTruthDistancePlotMax,
+                     kRecoTruthDeltaZPlotMin,
+                     kRecoTruthDeltaZPlotMax);
+    cRecoSpaceSelectedMaxLvsDeltaZ.SaveAs(
+      (outputDirectory + "/RecoSpaceSelectedSharedFoilMaxLvsDeltaZ_Scatter.pdf").c_str());
+
+    TCanvas cRecoMinTimeMaxLvsDeltaZTest(
+      "cRecoMinTimeMaxLvsDeltaZTest",
+      "TEST: minimum-|#Delta t| shared same-foil pair: #Delta z vs max(L_{1}, L_{2})",
+      900,
+      700);
+    drawScatterGraph(gTestRecoMinTimeSharedFoilMaxLvsDeltaZ,
+                     kFoilPointTruthDistancePlotMin,
+                     kFoilPointTruthDistancePlotMax,
+                     kRecoTruthDeltaZPlotMin,
+                     kRecoTruthDeltaZPlotMax);
+    cRecoMinTimeMaxLvsDeltaZTest.SaveAs(
+      (outputDirectory + "/RecoMinTimeSharedFoilMaxLvsDeltaZ_Scatter_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTime("cTestRecoVertexMinTime",
                                    "TEST: minimum-|#Delta t| reconstructed two-electron vertex position",
