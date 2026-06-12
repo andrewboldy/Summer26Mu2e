@@ -186,6 +186,39 @@ namespace twoelectronplots
     TH1F* hRecoVertexMinTimeDifferenceTest = get1DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeDifference");
+    TH1F* hTestRecoVertexMinTimeX = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeX");
+    TH1F* hTestRecoVertexMinTimeY = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeY");
+    TH1F* hTestRecoVertexMinTimeZ = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeZ");
+    TH2F* hTestRecoVertexMinTimeXY = get2DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeXY");
+    TH2F* hTestRecoVertexMinTimeXZ = get2DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeXZ");
+    TH2F* hTestRecoVertexMinTimeYZ = get2DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeYZ");
+    TH1F* hTestRecoVertexMinTimeDistance = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeLineDistance");
+    TH1F* hTestRecoVertexMinTimeTruthDeltaX = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTruthVertexMinTimeDeltaX");
+    TH1F* hTestRecoVertexMinTimeTruthDeltaY = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTruthVertexMinTimeDeltaY");
+    TH1F* hTestRecoVertexMinTimeTruthDeltaZ = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTruthVertexMinTimeDeltaZ");
+    TH1F* hTestRecoVertexMinTimeTruthDistance = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTruthVertexMinTimeDistance");
 
     if (hMCTruthOriginT == nullptr || hMCTruthOriginX == nullptr ||
         hMCTruthOriginY == nullptr || hMCTruthOriginZ == nullptr ||
@@ -198,7 +231,18 @@ namespace twoelectronplots
         hRecoVertexTruthDeltaX == nullptr || hRecoVertexTruthDeltaY == nullptr ||
         hRecoVertexTruthDeltaZ == nullptr || hRecoVertexTruthDistance == nullptr ||
         hRecoVertexSelectedSegmentDeltaTTest == nullptr ||
-        hRecoVertexMinTimeDifferenceTest == nullptr)
+        hRecoVertexMinTimeDifferenceTest == nullptr ||
+        hTestRecoVertexMinTimeX == nullptr ||
+        hTestRecoVertexMinTimeY == nullptr ||
+        hTestRecoVertexMinTimeZ == nullptr ||
+        hTestRecoVertexMinTimeXY == nullptr ||
+        hTestRecoVertexMinTimeXZ == nullptr ||
+        hTestRecoVertexMinTimeYZ == nullptr ||
+        hTestRecoVertexMinTimeDistance == nullptr ||
+        hTestRecoVertexMinTimeTruthDeltaX == nullptr ||
+        hTestRecoVertexMinTimeTruthDeltaY == nullptr ||
+        hTestRecoVertexMinTimeTruthDeltaZ == nullptr ||
+        hTestRecoVertexMinTimeTruthDistance == nullptr)
     {
       std::cerr << "ERROR: one or more expected histograms are missing from "
                 << histogramFileName << std::endl;
@@ -223,6 +267,14 @@ namespace twoelectronplots
     style1DHistogram(hRecoVertexTruthDistance);
     style1DHistogram(hRecoVertexSelectedSegmentDeltaTTest);
     style1DHistogram(hRecoVertexMinTimeDifferenceTest);
+    style1DHistogram(hTestRecoVertexMinTimeX);
+    style1DHistogram(hTestRecoVertexMinTimeY);
+    style1DHistogram(hTestRecoVertexMinTimeZ);
+    style1DHistogram(hTestRecoVertexMinTimeDistance);
+    style1DHistogram(hTestRecoVertexMinTimeTruthDeltaX);
+    style1DHistogram(hTestRecoVertexMinTimeTruthDeltaY);
+    style1DHistogram(hTestRecoVertexMinTimeTruthDeltaZ);
+    style1DHistogram(hTestRecoVertexMinTimeTruthDistance);
 
     TCanvas cTruthOrigin("cTruthOrigin",
                          "MC truth rank-0 downstream electron origin",
@@ -306,6 +358,48 @@ namespace twoelectronplots
     hRecoVertexMinTimeDifferenceTest->Draw("HIST E");
     cRecoVertexMinTimeDifferenceTest.SaveAs(
       (outputDirectory + "/RecoVertexMinTimeDifference_TEST.pdf").c_str());
+
+    TCanvas cTestRecoVertexMinTime("cTestRecoVertexMinTime",
+                                   "TEST: minimum-|#Delta t| reconstructed two-electron vertex position",
+                                   1200,
+                                   800);
+    cTestRecoVertexMinTime.Divide(2, 2);
+    cTestRecoVertexMinTime.cd(1); hTestRecoVertexMinTimeX->Draw("HIST E");
+    cTestRecoVertexMinTime.cd(2); hTestRecoVertexMinTimeY->Draw("HIST E");
+    cTestRecoVertexMinTime.cd(3); hTestRecoVertexMinTimeZ->Draw("HIST E");
+    cTestRecoVertexMinTime.cd(4); hTestRecoVertexMinTimeDistance->Draw("HIST E");
+    cTestRecoVertexMinTime.SaveAs(
+      (outputDirectory + "/RecoVertexMinTimeChoice_1D_TEST.pdf").c_str());
+
+    TCanvas cTestRecoVertexMinTimeResidual("cTestRecoVertexMinTimeResidual",
+                                           "TEST: minimum-|#Delta t| reconstructed minus truth vertex residual",
+                                           1600,
+                                           800);
+    cTestRecoVertexMinTimeResidual.Divide(2, 2);
+    cTestRecoVertexMinTimeResidual.cd(1);
+    hTestRecoVertexMinTimeTruthDeltaX->Draw("HIST E");
+    cTestRecoVertexMinTimeResidual.cd(2);
+    hTestRecoVertexMinTimeTruthDeltaY->Draw("HIST E");
+    cTestRecoVertexMinTimeResidual.cd(3);
+    hTestRecoVertexMinTimeTruthDeltaZ->Draw("HIST E");
+    cTestRecoVertexMinTimeResidual.cd(4);
+    hTestRecoVertexMinTimeTruthDistance->Draw("HIST E");
+    cTestRecoVertexMinTimeResidual.SaveAs(
+      (outputDirectory + "/RecoVertexMinTimeChoiceTruthResidualXYZ_TEST.pdf").c_str());
+
+    TCanvas cTestRecoVertexMinTimeMaps("cTestRecoVertexMinTimeMaps",
+                                       "TEST: minimum-|#Delta t| reconstructed two-electron vertex maps",
+                                       1500,
+                                       500);
+    cTestRecoVertexMinTimeMaps.Divide(3, 1);
+    cTestRecoVertexMinTimeMaps.cd(1);
+    draw2DHistogram(hTestRecoVertexMinTimeXY); drawStoppingTargetBoxXY();
+    cTestRecoVertexMinTimeMaps.cd(2);
+    draw2DHistogram(hTestRecoVertexMinTimeXZ); drawStoppingTargetBoxXZ();
+    cTestRecoVertexMinTimeMaps.cd(3);
+    draw2DHistogram(hTestRecoVertexMinTimeYZ); drawStoppingTargetBoxYZ();
+    cTestRecoVertexMinTimeMaps.SaveAs(
+      (outputDirectory + "/RecoVertexMinTimeChoice_2DMaps_TEST.pdf").c_str());
 
     histogramFile->Close();
     delete histogramFile;

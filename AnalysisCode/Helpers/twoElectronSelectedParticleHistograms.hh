@@ -19,6 +19,8 @@
 //     - book MC truth momentum histograms
 //     - book reconstructed momentum histograms
 //     - book reconstructed two-track vertex position histograms
+//     - book TEST reconstructed vertex histograms for the minimum-|Delta t|
+//       shared ST_Foils crossing choice
 //     - fill only rank-0 downstream electron truth particles
 //     - write the full histogram set to a ROOT file
 //
@@ -117,10 +119,21 @@ namespace twoelectronhist
     TH1F* recoVertexLineDistance = nullptr;
     TH1F* recoVertexSelectedSegmentDeltaTTest = nullptr;
     TH1F* recoVertexMinTimeDifferenceTest = nullptr;
+    TH1F* testRecoVertexMinTimeX = nullptr;
+    TH1F* testRecoVertexMinTimeY = nullptr;
+    TH1F* testRecoVertexMinTimeZ = nullptr;
+    TH2F* testRecoVertexMinTimeXY = nullptr;
+    TH2F* testRecoVertexMinTimeXZ = nullptr;
+    TH2F* testRecoVertexMinTimeYZ = nullptr;
+    TH1F* testRecoVertexMinTimeLineDistance = nullptr;
     TH1F* recoVertexTruthDeltaX = nullptr;
     TH1F* recoVertexTruthDeltaY = nullptr;
     TH1F* recoVertexTruthDeltaZ = nullptr;
     TH1F* recoVertexTruthDistance = nullptr;
+    TH1F* testRecoVertexMinTimeTruthDeltaX = nullptr;
+    TH1F* testRecoVertexMinTimeTruthDeltaY = nullptr;
+    TH1F* testRecoVertexMinTimeTruthDeltaZ = nullptr;
+    TH1F* testRecoVertexMinTimeTruthDistance = nullptr;
 
     Long64_t selectedEvents = 0;
     Long64_t mcTruthEntries = 0;
@@ -128,7 +141,9 @@ namespace twoelectronhist
     Long64_t recoVertexEntries = 0;
     Long64_t recoVertexSelectedSegmentDeltaTEntries = 0;
     Long64_t recoVertexMinTimeDifferenceEntries = 0;
+    Long64_t testRecoVertexMinTimeEntries = 0;
     Long64_t recoVertexTruthResidualEntries = 0;
+    Long64_t testRecoVertexMinTimeTruthResidualEntries = 0;
   };
 
   inline TH1F* make1D(const std::string& name,
@@ -296,6 +311,57 @@ namespace twoelectronhist
              config.timeDifferenceBins,
              config.timeDifferenceMin,
              config.timeDifferenceMax);
+    book.testRecoVertexMinTimeX =
+      make1D("hTESTRecoTwoElectronVertexMinTimeX",
+             "TEST: minimum-|#Delta t| shared ST_Foils reconstructed vertex x;x_{vtx} [mm];entries",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax);
+    book.testRecoVertexMinTimeY =
+      make1D("hTESTRecoTwoElectronVertexMinTimeY",
+             "TEST: minimum-|#Delta t| shared ST_Foils reconstructed vertex y;y_{vtx} [mm];entries",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax);
+    book.testRecoVertexMinTimeZ =
+      make1D("hTESTRecoTwoElectronVertexMinTimeZ",
+             "TEST: minimum-|#Delta t| shared ST_Foils reconstructed vertex z;z_{vtx} [mm];entries",
+             config.zBins,
+             config.zMin,
+             config.zMax);
+    book.testRecoVertexMinTimeXY =
+      make2D("hTESTRecoTwoElectronVertexMinTimeXY",
+             "TEST: minimum-|#Delta t| shared ST_Foils reconstructed vertex;x_{vtx} [mm];y_{vtx} [mm]",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax,
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax);
+    book.testRecoVertexMinTimeXZ =
+      make2D("hTESTRecoTwoElectronVertexMinTimeXZ",
+             "TEST: minimum-|#Delta t| shared ST_Foils reconstructed vertex;x_{vtx} [mm];z_{vtx} [mm]",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax,
+             config.zBins,
+             config.zMin,
+             config.zMax);
+    book.testRecoVertexMinTimeYZ =
+      make2D("hTESTRecoTwoElectronVertexMinTimeYZ",
+             "TEST: minimum-|#Delta t| shared ST_Foils reconstructed vertex;y_{vtx} [mm];z_{vtx} [mm]",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax,
+             config.zBins,
+             config.zMin,
+             config.zMax);
+    book.testRecoVertexMinTimeLineDistance =
+      make1D("hTESTRecoTwoElectronVertexMinTimeLineDistance",
+             "TEST: minimum-|#Delta t| shared ST_Foils closest-line distance;line-line distance [mm];entries",
+             config.vertexDistanceBins,
+             config.vertexDistanceMin,
+             config.vertexDistanceMax);
     book.recoVertexTruthDeltaX =
       make1D("hRecoTruthVertexDeltaX",
              "Selected two-track vertex minus truth origin x difference;#Delta x [mm];entries",
@@ -317,6 +383,30 @@ namespace twoelectronhist
     book.recoVertexTruthDistance =
       make1D("hRecoTruthVertexDistance",
              "Selected two-track vertex minus truth origin residual magnitude;|#Delta r| [mm];entries",
+             config.vertexDistanceBins,
+             config.vertexDistanceMin,
+             1000.0);
+    book.testRecoVertexMinTimeTruthDeltaX =
+      make1D("hTESTRecoTruthVertexMinTimeDeltaX",
+             "TEST: minimum-|#Delta t| vertex minus truth origin x difference;#Delta x [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
+    book.testRecoVertexMinTimeTruthDeltaY =
+      make1D("hTESTRecoTruthVertexMinTimeDeltaY",
+             "TEST: minimum-|#Delta t| vertex minus truth origin y difference;#Delta y [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
+    book.testRecoVertexMinTimeTruthDeltaZ =
+      make1D("hTESTRecoTruthVertexMinTimeDeltaZ",
+             "TEST: minimum-|#Delta t| vertex minus truth origin z difference;#Delta z [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
+    book.testRecoVertexMinTimeTruthDistance =
+      make1D("hTESTRecoTruthVertexMinTimeDistance",
+             "TEST: minimum-|#Delta t| vertex minus truth origin residual magnitude;|#Delta r| [mm];entries",
              config.vertexDistanceBins,
              config.vertexDistanceMin,
              1000.0);
@@ -450,6 +540,25 @@ namespace twoelectronhist
     ++book.recoVertexMinTimeDifferenceEntries;
   }
 
+  inline void fillRecoVertexMinTimeChoiceTest(
+    HistogramBook& book,
+    const twoparticlevertexer::VertexResult& vertex)
+  {
+    if (!vertex.valid)
+    {
+      return;
+    }
+
+    book.testRecoVertexMinTimeX->Fill(vertex.vertex.x());
+    book.testRecoVertexMinTimeY->Fill(vertex.vertex.y());
+    book.testRecoVertexMinTimeZ->Fill(vertex.vertex.z());
+    book.testRecoVertexMinTimeXY->Fill(vertex.vertex.x(), vertex.vertex.y());
+    book.testRecoVertexMinTimeXZ->Fill(vertex.vertex.x(), vertex.vertex.z());
+    book.testRecoVertexMinTimeYZ->Fill(vertex.vertex.y(), vertex.vertex.z());
+    book.testRecoVertexMinTimeLineDistance->Fill(vertex.distance);
+    ++book.testRecoVertexMinTimeEntries;
+  }
+
   inline void fillRecoVertexTruthResidual(HistogramBook& book, const XYZVectorF& delta)
   {
     if (!std::isfinite(delta.x()) || !std::isfinite(delta.y()) || !std::isfinite(delta.z()))
@@ -462,6 +571,21 @@ namespace twoelectronhist
     book.recoVertexTruthDeltaZ->Fill(delta.z());
     book.recoVertexTruthDistance->Fill(delta.R());
     ++book.recoVertexTruthResidualEntries;
+  }
+
+  inline void fillRecoVertexMinTimeTruthResidualTest(HistogramBook& book,
+                                                     const XYZVectorF& delta)
+  {
+    if (!std::isfinite(delta.x()) || !std::isfinite(delta.y()) || !std::isfinite(delta.z()))
+    {
+      return;
+    }
+
+    book.testRecoVertexMinTimeTruthDeltaX->Fill(delta.x());
+    book.testRecoVertexMinTimeTruthDeltaY->Fill(delta.y());
+    book.testRecoVertexMinTimeTruthDeltaZ->Fill(delta.z());
+    book.testRecoVertexMinTimeTruthDistance->Fill(delta.R());
+    ++book.testRecoVertexMinTimeTruthResidualEntries;
   }
 
   inline void writeOne(TH1* histogram)
@@ -501,10 +625,21 @@ namespace twoelectronhist
     writeOne(book.recoVertexLineDistance);
     writeOne(book.recoVertexSelectedSegmentDeltaTTest);
     writeOne(book.recoVertexMinTimeDifferenceTest);
+    writeOne(book.testRecoVertexMinTimeX);
+    writeOne(book.testRecoVertexMinTimeY);
+    writeOne(book.testRecoVertexMinTimeZ);
+    writeOne(book.testRecoVertexMinTimeXY);
+    writeOne(book.testRecoVertexMinTimeXZ);
+    writeOne(book.testRecoVertexMinTimeYZ);
+    writeOne(book.testRecoVertexMinTimeLineDistance);
     writeOne(book.recoVertexTruthDeltaX);
     writeOne(book.recoVertexTruthDeltaY);
     writeOne(book.recoVertexTruthDeltaZ);
     writeOne(book.recoVertexTruthDistance);
+    writeOne(book.testRecoVertexMinTimeTruthDeltaX);
+    writeOne(book.testRecoVertexMinTimeTruthDeltaY);
+    writeOne(book.testRecoVertexMinTimeTruthDeltaZ);
+    writeOne(book.testRecoVertexMinTimeTruthDistance);
     outputFile->Close();
     delete outputFile;
     return true;

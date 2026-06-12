@@ -43,9 +43,10 @@
 //   selection cut.
 //
 //   Within those selected events, the reconstructed vertex is built from the
-//   shared ST_Foils surface pair with the smallest closest-line distance.  MC
-//   truth histograms are filled only from trkmcsim particles that are rank 0
-//   downstream electrons:
+//   shared ST_Foils surface pair with the smallest closest-line distance.  A
+//   parallel TEST histogram set is also filled for the shared ST_Foils surface
+//   pair with the smallest absolute time difference.  MC truth histograms are
+//   filled only from trkmcsim particles that are rank 0 downstream electrons:
 //
 //       sim.valid
 //       sim.rank == 0
@@ -997,17 +998,29 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
           histograms,
           selectedPairVertex);
 
-        if (timeSelectedPairVertex.valid)
-        {
-          twoelectronhist::fillRecoVertexMinTimeDifferenceTest(
-            histograms,
-            timeSelectedPairVertex);
-        }
-
         if (truthOrigin != nullptr)
         {
           const XYZVectorF truthToReco = selectedPairVertex.vertex - truthOrigin->pos;
           twoelectronhist::fillRecoVertexTruthResidual(histograms, truthToReco);
+        }
+      }
+
+      if (vertexWasAttempted && timeSelectedPairVertex.valid)
+      {
+        twoelectronhist::fillRecoVertexMinTimeChoiceTest(
+          histograms,
+          timeSelectedPairVertex);
+        twoelectronhist::fillRecoVertexMinTimeDifferenceTest(
+          histograms,
+          timeSelectedPairVertex);
+
+        if (truthOrigin != nullptr)
+        {
+          const XYZVectorF truthToReco =
+            timeSelectedPairVertex.vertex - truthOrigin->pos;
+          twoelectronhist::fillRecoVertexMinTimeTruthResidualTest(
+            histograms,
+            truthToReco);
         }
       }
     }
@@ -1132,6 +1145,12 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.recoVertexEntries << endl;
   cout << "  histogram reconstructed-vs-truth vertex residual entries: "
        << histograms.recoVertexTruthResidualEntries << endl;
+  cout << "  histogram TEST minimum-time reconstructed vertex entries: "
+       << histograms.testRecoVertexMinTimeEntries << endl;
+  cout << "  histogram TEST minimum-time vertex delta-t entries: "
+       << histograms.recoVertexMinTimeDifferenceEntries << endl;
+  cout << "  histogram TEST minimum-time reconstructed-vs-truth vertex residual entries: "
+       << histograms.testRecoVertexMinTimeTruthResidualEntries << endl;
   if (WRITE_HISTOGRAM_FILE)
   {
     cout << "  histogram output file: "
