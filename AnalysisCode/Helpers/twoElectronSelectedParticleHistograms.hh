@@ -116,6 +116,9 @@ namespace twoelectronhist
     TH2F* recoVertexXY = nullptr;
     TH2F* recoVertexXZ = nullptr;
     TH2F* recoVertexYZ = nullptr;
+    TH2F* recoVertexFoilIndexMatchedXY = nullptr;
+    TH2F* recoVertexFoilIndexMatchedXZ = nullptr;
+    TH2F* recoVertexFoilIndexMatchedYZ = nullptr;
     TH1F* recoVertexLineDistance = nullptr;
     TH1F* recoVertexSelectedSegmentDeltaTTest = nullptr;
     TH1F* recoVertexMinTimeDifferenceTest = nullptr;
@@ -125,25 +128,40 @@ namespace twoelectronhist
     TH2F* testRecoVertexMinTimeXY = nullptr;
     TH2F* testRecoVertexMinTimeXZ = nullptr;
     TH2F* testRecoVertexMinTimeYZ = nullptr;
+    TH2F* testRecoVertexMinTimeFoilIndexMatchedXY = nullptr;
+    TH2F* testRecoVertexMinTimeFoilIndexMatchedXZ = nullptr;
+    TH2F* testRecoVertexMinTimeFoilIndexMatchedYZ = nullptr;
     TH1F* testRecoVertexMinTimeLineDistance = nullptr;
     TH1F* recoVertexTruthDeltaX = nullptr;
     TH1F* recoVertexTruthDeltaY = nullptr;
     TH1F* recoVertexTruthDeltaZ = nullptr;
     TH1F* recoVertexTruthDistance = nullptr;
+    TH1F* recoVertexFoilIndexMatchedTruthDeltaX = nullptr;
+    TH1F* recoVertexFoilIndexMatchedTruthDeltaY = nullptr;
+    TH1F* recoVertexFoilIndexMatchedTruthDeltaZ = nullptr;
+    TH1F* recoVertexFoilIndexMatchedTruthDistance = nullptr;
     TH1F* testRecoVertexMinTimeTruthDeltaX = nullptr;
     TH1F* testRecoVertexMinTimeTruthDeltaY = nullptr;
     TH1F* testRecoVertexMinTimeTruthDeltaZ = nullptr;
     TH1F* testRecoVertexMinTimeTruthDistance = nullptr;
+    TH1F* testRecoVertexMinTimeFoilIndexMatchedTruthDeltaX = nullptr;
+    TH1F* testRecoVertexMinTimeFoilIndexMatchedTruthDeltaY = nullptr;
+    TH1F* testRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ = nullptr;
+    TH1F* testRecoVertexMinTimeFoilIndexMatchedTruthDistance = nullptr;
 
     Long64_t selectedEvents = 0;
     Long64_t mcTruthEntries = 0;
     Long64_t recoMomentumEntries = 0;
     Long64_t recoVertexEntries = 0;
+    Long64_t recoVertexFoilIndexMatchedEntries = 0;
     Long64_t recoVertexSelectedSegmentDeltaTEntries = 0;
     Long64_t recoVertexMinTimeDifferenceEntries = 0;
     Long64_t testRecoVertexMinTimeEntries = 0;
+    Long64_t testRecoVertexMinTimeFoilIndexMatchedEntries = 0;
     Long64_t recoVertexTruthResidualEntries = 0;
+    Long64_t recoVertexFoilIndexMatchedTruthResidualEntries = 0;
     Long64_t testRecoVertexMinTimeTruthResidualEntries = 0;
+    Long64_t testRecoVertexMinTimeFoilIndexMatchedTruthResidualEntries = 0;
   };
 
   inline TH1F* make1D(const std::string& name,
@@ -293,6 +311,33 @@ namespace twoelectronhist
              config.zBins,
              config.zMin,
              config.zMax);
+    book.recoVertexFoilIndexMatchedXY =
+      make2D("hRecoTwoElectronVertexFoilIndexMatchedXY",
+             "Foil-index matched selected two-track reconstructed vertex;x_{vtx} [mm];y_{vtx} [mm]",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax,
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax);
+    book.recoVertexFoilIndexMatchedXZ =
+      make2D("hRecoTwoElectronVertexFoilIndexMatchedXZ",
+             "Foil-index matched selected two-track reconstructed vertex;x_{vtx} [mm];z_{vtx} [mm]",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax,
+             config.zBins,
+             config.zMin,
+             config.zMax);
+    book.recoVertexFoilIndexMatchedYZ =
+      make2D("hRecoTwoElectronVertexFoilIndexMatchedYZ",
+             "Foil-index matched selected two-track reconstructed vertex;y_{vtx} [mm];z_{vtx} [mm]",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax,
+             config.zBins,
+             config.zMin,
+             config.zMax);
     book.recoVertexLineDistance =
       make1D("hRecoTwoElectronVertexLineDistance",
              "Selected two-track closest-line distance;line-line distance [mm];entries",
@@ -356,6 +401,33 @@ namespace twoelectronhist
              config.zBins,
              config.zMin,
              config.zMax);
+    book.testRecoVertexMinTimeFoilIndexMatchedXY =
+      make2D("hTESTRecoTwoElectronVertexMinTimeFoilIndexMatchedXY",
+             "TEST: foil-index matched minimum-|#Delta t| reconstructed vertex;x_{vtx} [mm];y_{vtx} [mm]",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax,
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax);
+    book.testRecoVertexMinTimeFoilIndexMatchedXZ =
+      make2D("hTESTRecoTwoElectronVertexMinTimeFoilIndexMatchedXZ",
+             "TEST: foil-index matched minimum-|#Delta t| reconstructed vertex;x_{vtx} [mm];z_{vtx} [mm]",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax,
+             config.zBins,
+             config.zMin,
+             config.zMax);
+    book.testRecoVertexMinTimeFoilIndexMatchedYZ =
+      make2D("hTESTRecoTwoElectronVertexMinTimeFoilIndexMatchedYZ",
+             "TEST: foil-index matched minimum-|#Delta t| reconstructed vertex;y_{vtx} [mm];z_{vtx} [mm]",
+             config.transverseBins,
+             config.transverseMin,
+             config.transverseMax,
+             config.zBins,
+             config.zMin,
+             config.zMax);
     book.testRecoVertexMinTimeLineDistance =
       make1D("hTESTRecoTwoElectronVertexMinTimeLineDistance",
              "TEST: minimum-|#Delta t| shared ST_Foils closest-line distance;line-line distance [mm];entries",
@@ -386,6 +458,30 @@ namespace twoelectronhist
              config.vertexDistanceBins,
              config.vertexDistanceMin,
              1000.0);
+    book.recoVertexFoilIndexMatchedTruthDeltaX =
+      make1D("hRecoTruthVertexFoilIndexMatchedDeltaX",
+             "Foil-index matched vertex minus truth origin x difference;#Delta x [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
+    book.recoVertexFoilIndexMatchedTruthDeltaY =
+      make1D("hRecoTruthVertexFoilIndexMatchedDeltaY",
+             "Foil-index matched vertex minus truth origin y difference;#Delta y [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
+    book.recoVertexFoilIndexMatchedTruthDeltaZ =
+      make1D("hRecoTruthVertexFoilIndexMatchedDeltaZ",
+             "Foil-index matched vertex minus truth origin z difference;#Delta z [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
+    book.recoVertexFoilIndexMatchedTruthDistance =
+      make1D("hRecoTruthVertexFoilIndexMatchedDistance",
+             "Foil-index matched vertex minus truth origin residual magnitude;|#Delta r| [mm];entries",
+             config.vertexDistanceBins,
+             config.vertexDistanceMin,
+             1000.0);
     book.testRecoVertexMinTimeTruthDeltaX =
       make1D("hTESTRecoTruthVertexMinTimeDeltaX",
              "TEST: minimum-|#Delta t| vertex minus truth origin x difference;#Delta x [mm];entries",
@@ -407,6 +503,30 @@ namespace twoelectronhist
     book.testRecoVertexMinTimeTruthDistance =
       make1D("hTESTRecoTruthVertexMinTimeDistance",
              "TEST: minimum-|#Delta t| vertex minus truth origin residual magnitude;|#Delta r| [mm];entries",
+             config.vertexDistanceBins,
+             config.vertexDistanceMin,
+             1000.0);
+    book.testRecoVertexMinTimeFoilIndexMatchedTruthDeltaX =
+      make1D("hTESTRecoTruthVertexMinTimeFoilIndexMatchedDeltaX",
+             "TEST: foil-index matched minimum-|#Delta t| vertex minus truth origin x difference;#Delta x [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
+    book.testRecoVertexMinTimeFoilIndexMatchedTruthDeltaY =
+      make1D("hTESTRecoTruthVertexMinTimeFoilIndexMatchedDeltaY",
+             "TEST: foil-index matched minimum-|#Delta t| vertex minus truth origin y difference;#Delta y [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
+    book.testRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ =
+      make1D("hTESTRecoTruthVertexMinTimeFoilIndexMatchedDeltaZ",
+             "TEST: foil-index matched minimum-|#Delta t| vertex minus truth origin z difference;#Delta z [mm];entries",
+             config.transverseBins,
+             -1000.0,
+             1000.0);
+    book.testRecoVertexMinTimeFoilIndexMatchedTruthDistance =
+      make1D("hTESTRecoTruthVertexMinTimeFoilIndexMatchedDistance",
+             "TEST: foil-index matched minimum-|#Delta t| vertex minus truth origin residual magnitude;|#Delta r| [mm];entries",
              config.vertexDistanceBins,
              config.vertexDistanceMin,
              1000.0);
@@ -514,6 +634,21 @@ namespace twoelectronhist
     ++book.recoVertexEntries;
   }
 
+  inline void fillRecoVertexFoilIndexMatchedMaps(
+    HistogramBook& book,
+    const twoparticlevertexer::VertexResult& vertex)
+  {
+    if (!vertex.valid)
+    {
+      return;
+    }
+
+    book.recoVertexFoilIndexMatchedXY->Fill(vertex.vertex.x(), vertex.vertex.y());
+    book.recoVertexFoilIndexMatchedXZ->Fill(vertex.vertex.x(), vertex.vertex.z());
+    book.recoVertexFoilIndexMatchedYZ->Fill(vertex.vertex.y(), vertex.vertex.z());
+    ++book.recoVertexFoilIndexMatchedEntries;
+  }
+
   inline void fillRecoVertexSelectedSegmentTimeDifference(
     HistogramBook& book,
     const twoparticlevertexer::VertexResult& vertex)
@@ -559,6 +694,24 @@ namespace twoelectronhist
     ++book.testRecoVertexMinTimeEntries;
   }
 
+  inline void fillRecoVertexMinTimeFoilIndexMatchedMapsTest(
+    HistogramBook& book,
+    const twoparticlevertexer::VertexResult& vertex)
+  {
+    if (!vertex.valid)
+    {
+      return;
+    }
+
+    book.testRecoVertexMinTimeFoilIndexMatchedXY->Fill(vertex.vertex.x(),
+                                                       vertex.vertex.y());
+    book.testRecoVertexMinTimeFoilIndexMatchedXZ->Fill(vertex.vertex.x(),
+                                                       vertex.vertex.z());
+    book.testRecoVertexMinTimeFoilIndexMatchedYZ->Fill(vertex.vertex.y(),
+                                                       vertex.vertex.z());
+    ++book.testRecoVertexMinTimeFoilIndexMatchedEntries;
+  }
+
   inline void fillRecoVertexTruthResidual(HistogramBook& book, const XYZVectorF& delta)
   {
     if (!std::isfinite(delta.x()) || !std::isfinite(delta.y()) || !std::isfinite(delta.z()))
@@ -571,6 +724,21 @@ namespace twoelectronhist
     book.recoVertexTruthDeltaZ->Fill(delta.z());
     book.recoVertexTruthDistance->Fill(delta.R());
     ++book.recoVertexTruthResidualEntries;
+  }
+
+  inline void fillRecoVertexFoilIndexMatchedTruthResidual(HistogramBook& book,
+                                                          const XYZVectorF& delta)
+  {
+    if (!std::isfinite(delta.x()) || !std::isfinite(delta.y()) || !std::isfinite(delta.z()))
+    {
+      return;
+    }
+
+    book.recoVertexFoilIndexMatchedTruthDeltaX->Fill(delta.x());
+    book.recoVertexFoilIndexMatchedTruthDeltaY->Fill(delta.y());
+    book.recoVertexFoilIndexMatchedTruthDeltaZ->Fill(delta.z());
+    book.recoVertexFoilIndexMatchedTruthDistance->Fill(delta.R());
+    ++book.recoVertexFoilIndexMatchedTruthResidualEntries;
   }
 
   inline void fillRecoVertexMinTimeTruthResidualTest(HistogramBook& book,
@@ -586,6 +754,22 @@ namespace twoelectronhist
     book.testRecoVertexMinTimeTruthDeltaZ->Fill(delta.z());
     book.testRecoVertexMinTimeTruthDistance->Fill(delta.R());
     ++book.testRecoVertexMinTimeTruthResidualEntries;
+  }
+
+  inline void fillRecoVertexMinTimeFoilIndexMatchedTruthResidualTest(
+    HistogramBook& book,
+    const XYZVectorF& delta)
+  {
+    if (!std::isfinite(delta.x()) || !std::isfinite(delta.y()) || !std::isfinite(delta.z()))
+    {
+      return;
+    }
+
+    book.testRecoVertexMinTimeFoilIndexMatchedTruthDeltaX->Fill(delta.x());
+    book.testRecoVertexMinTimeFoilIndexMatchedTruthDeltaY->Fill(delta.y());
+    book.testRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ->Fill(delta.z());
+    book.testRecoVertexMinTimeFoilIndexMatchedTruthDistance->Fill(delta.R());
+    ++book.testRecoVertexMinTimeFoilIndexMatchedTruthResidualEntries;
   }
 
   inline void writeOne(TH1* histogram)
@@ -622,6 +806,9 @@ namespace twoelectronhist
     writeOne(book.recoVertexXY);
     writeOne(book.recoVertexXZ);
     writeOne(book.recoVertexYZ);
+    writeOne(book.recoVertexFoilIndexMatchedXY);
+    writeOne(book.recoVertexFoilIndexMatchedXZ);
+    writeOne(book.recoVertexFoilIndexMatchedYZ);
     writeOne(book.recoVertexLineDistance);
     writeOne(book.recoVertexSelectedSegmentDeltaTTest);
     writeOne(book.recoVertexMinTimeDifferenceTest);
@@ -631,15 +818,26 @@ namespace twoelectronhist
     writeOne(book.testRecoVertexMinTimeXY);
     writeOne(book.testRecoVertexMinTimeXZ);
     writeOne(book.testRecoVertexMinTimeYZ);
+    writeOne(book.testRecoVertexMinTimeFoilIndexMatchedXY);
+    writeOne(book.testRecoVertexMinTimeFoilIndexMatchedXZ);
+    writeOne(book.testRecoVertexMinTimeFoilIndexMatchedYZ);
     writeOne(book.testRecoVertexMinTimeLineDistance);
     writeOne(book.recoVertexTruthDeltaX);
     writeOne(book.recoVertexTruthDeltaY);
     writeOne(book.recoVertexTruthDeltaZ);
     writeOne(book.recoVertexTruthDistance);
+    writeOne(book.recoVertexFoilIndexMatchedTruthDeltaX);
+    writeOne(book.recoVertexFoilIndexMatchedTruthDeltaY);
+    writeOne(book.recoVertexFoilIndexMatchedTruthDeltaZ);
+    writeOne(book.recoVertexFoilIndexMatchedTruthDistance);
     writeOne(book.testRecoVertexMinTimeTruthDeltaX);
     writeOne(book.testRecoVertexMinTimeTruthDeltaY);
     writeOne(book.testRecoVertexMinTimeTruthDeltaZ);
     writeOne(book.testRecoVertexMinTimeTruthDistance);
+    writeOne(book.testRecoVertexMinTimeFoilIndexMatchedTruthDeltaX);
+    writeOne(book.testRecoVertexMinTimeFoilIndexMatchedTruthDeltaY);
+    writeOne(book.testRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ);
+    writeOne(book.testRecoVertexMinTimeFoilIndexMatchedTruthDistance);
     outputFile->Close();
     delete outputFile;
     return true;

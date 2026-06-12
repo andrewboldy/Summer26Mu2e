@@ -1227,10 +1227,26 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
           histograms,
           selectedPairVertex);
 
+        if (selectedPairVertexFoilCheck.valid &&
+            selectedPairVertexFoilCheck.matchesSharedFoilIndex)
+        {
+          twoelectronhist::fillRecoVertexFoilIndexMatchedMaps(
+            histograms,
+            selectedPairVertex);
+        }
+
         if (truthOrigin != nullptr)
         {
           const XYZVectorF truthToReco = selectedPairVertex.vertex - truthOrigin->pos;
           twoelectronhist::fillRecoVertexTruthResidual(histograms, truthToReco);
+
+          if (selectedPairVertexFoilCheck.valid &&
+              selectedPairVertexFoilCheck.matchesSharedFoilIndex)
+          {
+            twoelectronhist::fillRecoVertexFoilIndexMatchedTruthResidual(
+              histograms,
+              truthToReco);
+          }
         }
       }
 
@@ -1243,6 +1259,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
           histograms,
           timeSelectedPairVertex);
 
+        if (timeSelectedPairVertexFoilCheck.valid &&
+            timeSelectedPairVertexFoilCheck.matchesSharedFoilIndex)
+        {
+          twoelectronhist::fillRecoVertexMinTimeFoilIndexMatchedMapsTest(
+            histograms,
+            timeSelectedPairVertex);
+        }
+
         if (truthOrigin != nullptr)
         {
           const XYZVectorF truthToReco =
@@ -1250,6 +1274,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
           twoelectronhist::fillRecoVertexMinTimeTruthResidualTest(
             histograms,
             truthToReco);
+
+          if (timeSelectedPairVertexFoilCheck.valid &&
+              timeSelectedPairVertexFoilCheck.matchesSharedFoilIndex)
+          {
+            twoelectronhist::fillRecoVertexMinTimeFoilIndexMatchedTruthResidualTest(
+              histograms,
+              truthToReco);
+          }
         }
       }
     }
@@ -1407,14 +1439,22 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.recoMomentumEntries << endl;
   cout << "  histogram reconstructed vertex entries: "
        << histograms.recoVertexEntries << endl;
+  cout << "  histogram foil-index matched reconstructed vertex map entries: "
+       << histograms.recoVertexFoilIndexMatchedEntries << endl;
   cout << "  histogram reconstructed-vs-truth vertex residual entries: "
        << histograms.recoVertexTruthResidualEntries << endl;
+  cout << "  histogram foil-index matched reconstructed-vs-truth vertex residual entries: "
+       << histograms.recoVertexFoilIndexMatchedTruthResidualEntries << endl;
   cout << "  histogram TEST minimum-time reconstructed vertex entries: "
        << histograms.testRecoVertexMinTimeEntries << endl;
+  cout << "  histogram TEST foil-index matched minimum-time reconstructed vertex map entries: "
+       << histograms.testRecoVertexMinTimeFoilIndexMatchedEntries << endl;
   cout << "  histogram TEST minimum-time vertex delta-t entries: "
        << histograms.recoVertexMinTimeDifferenceEntries << endl;
   cout << "  histogram TEST minimum-time reconstructed-vs-truth vertex residual entries: "
        << histograms.testRecoVertexMinTimeTruthResidualEntries << endl;
+  cout << "  histogram TEST foil-index matched minimum-time reconstructed-vs-truth vertex residual entries: "
+       << histograms.testRecoVertexMinTimeFoilIndexMatchedTruthResidualEntries << endl;
   if (WRITE_HISTOGRAM_FILE)
   {
     cout << "  histogram output file: "

@@ -170,6 +170,15 @@ namespace twoelectronplots
     TH2F* hRecoVertexXY = get2DHistogram(*histogramFile, "hRecoTwoElectronVertexXY");
     TH2F* hRecoVertexXZ = get2DHistogram(*histogramFile, "hRecoTwoElectronVertexXZ");
     TH2F* hRecoVertexYZ = get2DHistogram(*histogramFile, "hRecoTwoElectronVertexYZ");
+    TH2F* hRecoVertexFoilIndexMatchedXY = get2DHistogram(
+      *histogramFile,
+      "hRecoTwoElectronVertexFoilIndexMatchedXY");
+    TH2F* hRecoVertexFoilIndexMatchedXZ = get2DHistogram(
+      *histogramFile,
+      "hRecoTwoElectronVertexFoilIndexMatchedXZ");
+    TH2F* hRecoVertexFoilIndexMatchedYZ = get2DHistogram(
+      *histogramFile,
+      "hRecoTwoElectronVertexFoilIndexMatchedYZ");
     TH1F* hRecoVertexDistance = get1DHistogram(*histogramFile,
                                                 "hRecoTwoElectronVertexLineDistance");
     TH1F* hRecoVertexTruthDeltaX = get1DHistogram(*histogramFile,
@@ -180,6 +189,18 @@ namespace twoelectronplots
                                                    "hRecoTruthVertexDeltaZ");
     TH1F* hRecoVertexTruthDistance = get1DHistogram(*histogramFile,
                                                      "hRecoTruthVertexDistance");
+    TH1F* hRecoVertexFoilIndexMatchedTruthDeltaX = get1DHistogram(
+      *histogramFile,
+      "hRecoTruthVertexFoilIndexMatchedDeltaX");
+    TH1F* hRecoVertexFoilIndexMatchedTruthDeltaY = get1DHistogram(
+      *histogramFile,
+      "hRecoTruthVertexFoilIndexMatchedDeltaY");
+    TH1F* hRecoVertexFoilIndexMatchedTruthDeltaZ = get1DHistogram(
+      *histogramFile,
+      "hRecoTruthVertexFoilIndexMatchedDeltaZ");
+    TH1F* hRecoVertexFoilIndexMatchedTruthDistance = get1DHistogram(
+      *histogramFile,
+      "hRecoTruthVertexFoilIndexMatchedDistance");
     TH1F* hRecoVertexSelectedSegmentDeltaTTest = get1DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexSelectedSegmentDeltaT");
@@ -204,6 +225,15 @@ namespace twoelectronplots
     TH2F* hTestRecoVertexMinTimeYZ = get2DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeYZ");
+    TH2F* hTestRecoVertexMinTimeFoilIndexMatchedXY = get2DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeFoilIndexMatchedXY");
+    TH2F* hTestRecoVertexMinTimeFoilIndexMatchedXZ = get2DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeFoilIndexMatchedXZ");
+    TH2F* hTestRecoVertexMinTimeFoilIndexMatchedYZ = get2DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeFoilIndexMatchedYZ");
     TH1F* hTestRecoVertexMinTimeDistance = get1DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeLineDistance");
@@ -219,6 +249,18 @@ namespace twoelectronplots
     TH1F* hTestRecoVertexMinTimeTruthDistance = get1DHistogram(
       *histogramFile,
       "hTESTRecoTruthVertexMinTimeDistance");
+    TH1F* hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaX = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTruthVertexMinTimeFoilIndexMatchedDeltaX");
+    TH1F* hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaY = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTruthVertexMinTimeFoilIndexMatchedDeltaY");
+    TH1F* hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTruthVertexMinTimeFoilIndexMatchedDeltaZ");
+    TH1F* hTestRecoVertexMinTimeFoilIndexMatchedTruthDistance = get1DHistogram(
+      *histogramFile,
+      "hTESTRecoTruthVertexMinTimeFoilIndexMatchedDistance");
 
     if (hMCTruthOriginT == nullptr || hMCTruthOriginX == nullptr ||
         hMCTruthOriginY == nullptr || hMCTruthOriginZ == nullptr ||
@@ -228,8 +270,15 @@ namespace twoelectronplots
         hRecoVertexY == nullptr || hRecoVertexZ == nullptr ||
         hRecoVertexXY == nullptr || hRecoVertexXZ == nullptr ||
         hRecoVertexYZ == nullptr || hRecoVertexDistance == nullptr ||
+        hRecoVertexFoilIndexMatchedXY == nullptr ||
+        hRecoVertexFoilIndexMatchedXZ == nullptr ||
+        hRecoVertexFoilIndexMatchedYZ == nullptr ||
         hRecoVertexTruthDeltaX == nullptr || hRecoVertexTruthDeltaY == nullptr ||
         hRecoVertexTruthDeltaZ == nullptr || hRecoVertexTruthDistance == nullptr ||
+        hRecoVertexFoilIndexMatchedTruthDeltaX == nullptr ||
+        hRecoVertexFoilIndexMatchedTruthDeltaY == nullptr ||
+        hRecoVertexFoilIndexMatchedTruthDeltaZ == nullptr ||
+        hRecoVertexFoilIndexMatchedTruthDistance == nullptr ||
         hRecoVertexSelectedSegmentDeltaTTest == nullptr ||
         hRecoVertexMinTimeDifferenceTest == nullptr ||
         hTestRecoVertexMinTimeX == nullptr ||
@@ -238,11 +287,18 @@ namespace twoelectronplots
         hTestRecoVertexMinTimeXY == nullptr ||
         hTestRecoVertexMinTimeXZ == nullptr ||
         hTestRecoVertexMinTimeYZ == nullptr ||
+        hTestRecoVertexMinTimeFoilIndexMatchedXY == nullptr ||
+        hTestRecoVertexMinTimeFoilIndexMatchedXZ == nullptr ||
+        hTestRecoVertexMinTimeFoilIndexMatchedYZ == nullptr ||
         hTestRecoVertexMinTimeDistance == nullptr ||
         hTestRecoVertexMinTimeTruthDeltaX == nullptr ||
         hTestRecoVertexMinTimeTruthDeltaY == nullptr ||
         hTestRecoVertexMinTimeTruthDeltaZ == nullptr ||
-        hTestRecoVertexMinTimeTruthDistance == nullptr)
+        hTestRecoVertexMinTimeTruthDistance == nullptr ||
+        hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaX == nullptr ||
+        hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaY == nullptr ||
+        hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ == nullptr ||
+        hTestRecoVertexMinTimeFoilIndexMatchedTruthDistance == nullptr)
     {
       std::cerr << "ERROR: one or more expected histograms are missing from "
                 << histogramFileName << std::endl;
@@ -265,6 +321,10 @@ namespace twoelectronplots
     style1DHistogram(hRecoVertexTruthDeltaY);
     style1DHistogram(hRecoVertexTruthDeltaZ);
     style1DHistogram(hRecoVertexTruthDistance);
+    style1DHistogram(hRecoVertexFoilIndexMatchedTruthDeltaX);
+    style1DHistogram(hRecoVertexFoilIndexMatchedTruthDeltaY);
+    style1DHistogram(hRecoVertexFoilIndexMatchedTruthDeltaZ);
+    style1DHistogram(hRecoVertexFoilIndexMatchedTruthDistance);
     style1DHistogram(hRecoVertexSelectedSegmentDeltaTTest);
     style1DHistogram(hRecoVertexMinTimeDifferenceTest);
     style1DHistogram(hTestRecoVertexMinTimeX);
@@ -275,6 +335,10 @@ namespace twoelectronplots
     style1DHistogram(hTestRecoVertexMinTimeTruthDeltaY);
     style1DHistogram(hTestRecoVertexMinTimeTruthDeltaZ);
     style1DHistogram(hTestRecoVertexMinTimeTruthDistance);
+    style1DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaX);
+    style1DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaY);
+    style1DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ);
+    style1DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedTruthDistance);
 
     TCanvas cTruthOrigin("cTruthOrigin",
                          "MC truth rank-0 downstream electron origin",
@@ -343,6 +407,38 @@ namespace twoelectronplots
     cRecoVertexMaps.cd(3); draw2DHistogram(hRecoVertexYZ); drawStoppingTargetBoxYZ();
     cRecoVertexMaps.SaveAs((outputDirectory + "/RecoVertex_2DMaps.pdf").c_str());
 
+    TCanvas cRecoVertexFoilIndexMatchedMaps(
+      "cRecoVertexFoilIndexMatchedMaps",
+      "Foil-index matched reconstructed two-electron vertex maps",
+      1500,
+      500);
+    cRecoVertexFoilIndexMatchedMaps.Divide(3, 1);
+    cRecoVertexFoilIndexMatchedMaps.cd(1);
+    draw2DHistogram(hRecoVertexFoilIndexMatchedXY); drawStoppingTargetBoxXY();
+    cRecoVertexFoilIndexMatchedMaps.cd(2);
+    draw2DHistogram(hRecoVertexFoilIndexMatchedXZ); drawStoppingTargetBoxXZ();
+    cRecoVertexFoilIndexMatchedMaps.cd(3);
+    draw2DHistogram(hRecoVertexFoilIndexMatchedYZ); drawStoppingTargetBoxYZ();
+    cRecoVertexFoilIndexMatchedMaps.SaveAs(
+      (outputDirectory + "/RecoVertexFoilIndexMatched_2DMaps.pdf").c_str());
+
+    TCanvas cRecoVertexFoilIndexMatchedResidual(
+      "cRecoVertexFoilIndexMatchedResidual",
+      "Foil-index matched reconstructed minus truth vertex residual",
+      1600,
+      800);
+    cRecoVertexFoilIndexMatchedResidual.Divide(2, 2);
+    cRecoVertexFoilIndexMatchedResidual.cd(1);
+    hRecoVertexFoilIndexMatchedTruthDeltaX->Draw("HIST E");
+    cRecoVertexFoilIndexMatchedResidual.cd(2);
+    hRecoVertexFoilIndexMatchedTruthDeltaY->Draw("HIST E");
+    cRecoVertexFoilIndexMatchedResidual.cd(3);
+    hRecoVertexFoilIndexMatchedTruthDeltaZ->Draw("HIST E");
+    cRecoVertexFoilIndexMatchedResidual.cd(4);
+    hRecoVertexFoilIndexMatchedTruthDistance->Draw("HIST E");
+    cRecoVertexFoilIndexMatchedResidual.SaveAs(
+      (outputDirectory + "/RecoVertexFoilIndexMatchedTruthResidualXYZ.pdf").c_str());
+
     TCanvas cRecoVertexDeltaTTest("cRecoVertexDeltaTTest",
                                   "Selected reconstructed two-electron segment time differences",
                                   900,
@@ -400,6 +496,41 @@ namespace twoelectronplots
     draw2DHistogram(hTestRecoVertexMinTimeYZ); drawStoppingTargetBoxYZ();
     cTestRecoVertexMinTimeMaps.SaveAs(
       (outputDirectory + "/RecoVertexMinTimeChoice_2DMaps_TEST.pdf").c_str());
+
+    TCanvas cTestRecoVertexMinTimeFoilIndexMatchedMaps(
+      "cTestRecoVertexMinTimeFoilIndexMatchedMaps",
+      "TEST: foil-index matched minimum-|#Delta t| reconstructed vertex maps",
+      1500,
+      500);
+    cTestRecoVertexMinTimeFoilIndexMatchedMaps.Divide(3, 1);
+    cTestRecoVertexMinTimeFoilIndexMatchedMaps.cd(1);
+    draw2DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedXY);
+    drawStoppingTargetBoxXY();
+    cTestRecoVertexMinTimeFoilIndexMatchedMaps.cd(2);
+    draw2DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedXZ);
+    drawStoppingTargetBoxXZ();
+    cTestRecoVertexMinTimeFoilIndexMatchedMaps.cd(3);
+    draw2DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedYZ);
+    drawStoppingTargetBoxYZ();
+    cTestRecoVertexMinTimeFoilIndexMatchedMaps.SaveAs(
+      (outputDirectory + "/RecoVertexMinTimeFoilIndexMatched_2DMaps_TEST.pdf").c_str());
+
+    TCanvas cTestRecoVertexMinTimeFoilIndexMatchedResidual(
+      "cTestRecoVertexMinTimeFoilIndexMatchedResidual",
+      "TEST: foil-index matched minimum-|#Delta t| reconstructed minus truth vertex residual",
+      1600,
+      800);
+    cTestRecoVertexMinTimeFoilIndexMatchedResidual.Divide(2, 2);
+    cTestRecoVertexMinTimeFoilIndexMatchedResidual.cd(1);
+    hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaX->Draw("HIST E");
+    cTestRecoVertexMinTimeFoilIndexMatchedResidual.cd(2);
+    hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaY->Draw("HIST E");
+    cTestRecoVertexMinTimeFoilIndexMatchedResidual.cd(3);
+    hTestRecoVertexMinTimeFoilIndexMatchedTruthDeltaZ->Draw("HIST E");
+    cTestRecoVertexMinTimeFoilIndexMatchedResidual.cd(4);
+    hTestRecoVertexMinTimeFoilIndexMatchedTruthDistance->Draw("HIST E");
+    cTestRecoVertexMinTimeFoilIndexMatchedResidual.SaveAs(
+      (outputDirectory + "/RecoVertexMinTimeFoilIndexMatchedTruthResidualXYZ_TEST.pdf").c_str());
 
     histogramFile->Close();
     delete histogramFile;
