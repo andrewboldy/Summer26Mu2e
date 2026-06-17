@@ -110,10 +110,17 @@ namespace twoelectronhist
     double timeDifferenceMin = -250.0;
     double timeDifferenceMax = 250.0;
 
+    int recoTrackMultiplicityBins = 20;
+    double recoTrackMultiplicityMin = -0.5;
+    double recoTrackMultiplicityMax = 19.5;
+
     double foilPointTruthDistanceMin = 0.0;
     double foilPointTruthDistanceMax = 1000.0;
     double recoTruthDeltaZMin = -1000.0;
     double recoTruthDeltaZMax = 1000.0;
+
+    int stoppingTargetFoils = 37;
+    int deltaZByFoilBins = 200;
   };
 
   struct HistogramBook
@@ -149,6 +156,7 @@ namespace twoelectronhist
     TH1F* recoVertexAbsLineParameterT = nullptr;
     TH2F* recoVertexLineParameterST = nullptr;
     TH2F* recoVertexAbsLineParameterST = nullptr;
+    TH2F* recoTrackMultiplicityVsDeltaZ = nullptr;
     TH1F* recoVertexSelectedSegmentDeltaTTest = nullptr;
     TH1F* recoVertexMinTimeDifferenceTest = nullptr;
     TGraph* recoAllSharedFoilCandidateMaxLvsDeltaZ = nullptr;
@@ -156,6 +164,7 @@ namespace twoelectronhist
     TGraph* recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedSharedFoilNumberVsDeltaZ = nullptr;
+    std::vector<TH1F*> recoSpaceSelectedDeltaZBySelectedFoil;
     TGraph* recoSpaceSelectedSharedFoilCountVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedMaxFoilsHitVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ = nullptr;
@@ -199,6 +208,7 @@ namespace twoelectronhist
     Long64_t recoVertexMomentumOpeningAngleEntries = 0;
     Long64_t recoVertexFoilIndexMatchedEntries = 0;
     Long64_t recoVertexLineParameterEntries = 0;
+    Long64_t recoTrackMultiplicityVsDeltaZEntries = 0;
     Long64_t recoVertexSelectedSegmentDeltaTEntries = 0;
     Long64_t recoVertexMinTimeDifferenceEntries = 0;
     Long64_t recoAllSharedFoilCandidateMaxLvsDeltaZEntries = 0;
@@ -206,6 +216,7 @@ namespace twoelectronhist
     Long64_t recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilNumberVsDeltaZEntries = 0;
+    std::vector<Long64_t> recoSpaceSelectedDeltaZBySelectedFoilEntries;
     Long64_t recoSpaceSelectedSharedFoilCountVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedMaxFoilsHitVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZEntries = 0;
@@ -468,6 +479,15 @@ namespace twoelectronhist
              config.absLineParameterBins,
              config.absLineParameterMin,
              config.absLineParameterMax);
+    book.recoTrackMultiplicityVsDeltaZ =
+      make2D("hRecoTrackMultiplicityVsDeltaZ",
+             "Selected events;reconstructed tracks in event;#Delta z_{reco-truth} [mm]",
+             config.recoTrackMultiplicityBins,
+             config.recoTrackMultiplicityMin,
+             config.recoTrackMultiplicityMax,
+             config.deltaZByFoilBins,
+             config.recoTruthDeltaZMin,
+             config.recoTruthDeltaZMax);
     book.recoVertexSelectedSegmentDeltaTTest =
       make1D("hTESTRecoTwoElectronVertexSelectedSegmentDeltaT",
              "TEST: selected two-track segment time difference;#Delta t [ns];entries",
@@ -495,6 +515,22 @@ namespace twoelectronhist
     book.recoSpaceSelectedSharedFoilNumberVsDeltaZ =
       makeGraph("gRecoSpaceSelectedSharedFoilNumberVsDeltaZ",
                 "Space-selected shared same-foil pair;shared foil sindex;#Delta z_{reco-truth} [mm]");
+    book.recoSpaceSelectedDeltaZBySelectedFoil.reserve(config.stoppingTargetFoils);
+    book.recoSpaceSelectedDeltaZBySelectedFoilEntries.assign(
+      config.stoppingTargetFoils,
+      0);
+    for (int foilIndex = 0; foilIndex < config.stoppingTargetFoils; ++foilIndex)
+    {
+      book.recoSpaceSelectedDeltaZBySelectedFoil.push_back(
+        make1D("hRecoSpaceSelectedDeltaZSelectedFoil" +
+                 std::to_string(foilIndex),
+               "Space-selected shared foil sindex " +
+                 std::to_string(foilIndex) +
+                 ";#Delta z_{reco-truth} [mm];entries",
+               config.deltaZByFoilBins,
+               config.recoTruthDeltaZMin,
+               config.recoTruthDeltaZMax));
+    }
     book.recoSpaceSelectedSharedFoilCountVsDeltaZ =
       makeGraph("gRecoSpaceSelectedSharedFoilCountVsDeltaZ",
                 "Space-selected track pair;number of shared ST_Foils indices;#Delta z_{reco-truth} [mm]");
@@ -918,6 +954,22 @@ namespace twoelectronhist
     ++book.recoVertexFoilIndexMatchedEntries;
   }
 
+  inline void fillRecoTrackMultiplicityVsDeltaZ(HistogramBook& book,
+                                                size_t recoTrackCount,
+                                                double recoMinusTruthZ)
+  {
+    if (book.recoTrackMultiplicityVsDeltaZ == nullptr ||
+        !std::isfinite(recoMinusTruthZ))
+    {
+      return;
+    }
+
+    book.recoTrackMultiplicityVsDeltaZ->Fill(
+      static_cast<double>(recoTrackCount),
+      recoMinusTruthZ);
+    ++book.recoTrackMultiplicityVsDeltaZEntries;
+  }
+
   inline void fillRecoVertexSelectedSegmentTimeDifference(
     HistogramBook& book,
     const twoparticlevertexer::VertexResult& vertex)
@@ -1086,6 +1138,30 @@ namespace twoelectronhist
     ++entries;
   }
 
+  inline void fillRecoSpaceSelectedDeltaZForSelectedFoil(
+    HistogramBook& book,
+    int sharedFoilIndex,
+    double recoMinusTruthZ)
+  {
+    if (sharedFoilIndex < 0 ||
+        sharedFoilIndex >=
+          static_cast<int>(book.recoSpaceSelectedDeltaZBySelectedFoil.size()) ||
+        !std::isfinite(recoMinusTruthZ))
+    {
+      return;
+    }
+
+    TH1F* histogram =
+      book.recoSpaceSelectedDeltaZBySelectedFoil.at(sharedFoilIndex);
+    if (histogram == nullptr)
+    {
+      return;
+    }
+
+    histogram->Fill(recoMinusTruthZ);
+    ++book.recoSpaceSelectedDeltaZBySelectedFoilEntries.at(sharedFoilIndex);
+  }
+
   inline void fillRecoSpaceSelectedSharedFoilNumberVsDeltaZ(
     HistogramBook& book,
     int sharedFoilIndex,
@@ -1100,6 +1176,9 @@ namespace twoelectronhist
                             book.recoSpaceSelectedSharedFoilNumberVsDeltaZEntries,
                             static_cast<double>(sharedFoilIndex),
                             recoMinusTruthZ);
+    fillRecoSpaceSelectedDeltaZForSelectedFoil(book,
+                                               sharedFoilIndex,
+                                               recoMinusTruthZ);
   }
 
   inline void fillRecoSpaceSelectedSharedFoilCountVsDeltaZ(
@@ -1328,6 +1407,7 @@ namespace twoelectronhist
     writeOne(book.recoVertexAbsLineParameterT);
     writeOne(book.recoVertexLineParameterST);
     writeOne(book.recoVertexAbsLineParameterST);
+    writeOne(book.recoTrackMultiplicityVsDeltaZ);
     writeOne(book.recoVertexSelectedSegmentDeltaTTest);
     writeOne(book.recoVertexMinTimeDifferenceTest);
     writeOne(book.recoAllSharedFoilCandidateMaxLvsDeltaZ);
@@ -1335,6 +1415,10 @@ namespace twoelectronhist
     writeOne(book.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ);
     writeOne(book.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ);
     writeOne(book.recoSpaceSelectedSharedFoilNumberVsDeltaZ);
+    for (TH1F* histogram : book.recoSpaceSelectedDeltaZBySelectedFoil)
+    {
+      writeOne(histogram);
+    }
     writeOne(book.recoSpaceSelectedSharedFoilCountVsDeltaZ);
     writeOne(book.recoSpaceSelectedMaxFoilsHitVsDeltaZ);
     writeOne(book.recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ);

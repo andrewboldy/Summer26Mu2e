@@ -13,7 +13,8 @@
 //
 //   The helper deliberately keeps plotting separate from the histogram-filling
 //   code.  The comparer writes a ROOT file first; this helper opens that file
-//   afterwards and produces human-readable PDFs under:
+//   afterwards and produces human-readable PDFs under categorized
+//   subdirectories in:
 //
 //       Plots/TruthVsRecoPlots/
 //
@@ -25,6 +26,7 @@
 #include <algorithm>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include <TCanvas.h>
 #include <TAxis.h>
@@ -56,6 +58,22 @@ namespace twoelectronplots
   constexpr double kFoilCountPlotMax = 37.5;
   constexpr double kOpeningAngleDegreesPlotMin = 0.0;
   constexpr double kOpeningAngleDegreesPlotMax = 180.0;
+  constexpr int kSelectedFoilCount = 37;
+  constexpr int kDeltaZByFoilPlotsPerCanvas = 9;
+
+  inline std::string selectedFoilDeltaZHistogramName(int foilIndex)
+  {
+    return "hRecoSpaceSelectedDeltaZSelectedFoil" +
+           std::to_string(foilIndex);
+  }
+
+  inline void ensureDirectoryPath(const std::string& directoryPath)
+  {
+    if (!directoryPath.empty() && gSystem != nullptr)
+    {
+      gSystem->mkdir(directoryPath.c_str(), true);
+    }
+  }
 
   inline void ensureOutputDirectory(const std::string& outputPath)
   {
@@ -66,10 +84,7 @@ namespace twoelectronplots
     }
 
     const std::string outputDirectory = outputPath.substr(0, slashPosition);
-    if (!outputDirectory.empty() && gSystem != nullptr)
-    {
-      gSystem->mkdir(outputDirectory.c_str(), true);
-    }
+    ensureDirectoryPath(outputDirectory);
   }
 
   inline TH1F* get1DHistogram(TFile& file, const std::string& name)
@@ -158,6 +173,87 @@ namespace twoelectronplots
     }
   }
 
+  inline void drawDeltaZBySelectedFoilHistogram(TH1* histogram, int foilIndex)
+  {
+    if (histogram == nullptr)
+    {
+      return;
+    }
+
+    if (gPad != nullptr)
+    {
+      gPad->SetGridx();
+      gPad->SetGridy();
+    }
+
+    const Long64_t entries =
+      static_cast<Long64_t>(histogram->GetEntries());
+    const std::string title =
+      "selected foil sindex " + std::to_string(foilIndex) +
+      ", N = " + std::to_string(entries);
+    histogram->SetTitle(title.c_str());
+    histogram->SetLineColor(kBlue + 1);
+    histogram->SetLineWidth(2);
+    histogram->SetStats(false);
+    histogram->Draw("HIST E");
+  }
+
+  inline void saveDeltaZBySelectedFoilCanvases(
+    const std::vector<TH1F*>& deltaZBySelectedFoilHistograms,
+    const std::string& outputDirectory)
+  {
+    std::vector<int> selectedFoilIndices;
+    selectedFoilIndices.reserve(deltaZBySelectedFoilHistograms.size());
+    for (size_t foilIndex = 0;
+         foilIndex < deltaZBySelectedFoilHistograms.size();
+         ++foilIndex)
+    {
+      TH1F* histogram = deltaZBySelectedFoilHistograms.at(foilIndex);
+      if (histogram != nullptr && histogram->GetEntries() > 0.0)
+      {
+        selectedFoilIndices.push_back(static_cast<int>(foilIndex));
+      }
+    }
+
+    for (size_t firstFoilInCanvas = 0;
+         firstFoilInCanvas < selectedFoilIndices.size();
+         firstFoilInCanvas += kDeltaZByFoilPlotsPerCanvas)
+    {
+      const int pageNumber =
+        static_cast<int>(firstFoilInCanvas / kDeltaZByFoilPlotsPerCanvas) + 1;
+      const std::string canvasName =
+        "cRecoSpaceSelectedDeltaZBySelectedFoilPage" +
+        std::to_string(pageNumber);
+      const std::string canvasTitle =
+        "Space-selected #Delta z by selected foil, page " +
+        std::to_string(pageNumber);
+      TCanvas canvas(canvasName.c_str(), canvasTitle.c_str(), 1800, 1400);
+      canvas.Divide(3, 3);
+
+      for (int padIndex = 0;
+           padIndex < kDeltaZByFoilPlotsPerCanvas;
+           ++padIndex)
+      {
+        const size_t selectedIndex =
+          firstFoilInCanvas + static_cast<size_t>(padIndex);
+        if (selectedIndex >= selectedFoilIndices.size())
+        {
+          break;
+        }
+
+        const int foilIndex = selectedFoilIndices.at(selectedIndex);
+        canvas.cd(padIndex + 1);
+        drawDeltaZBySelectedFoilHistogram(
+          deltaZBySelectedFoilHistograms.at(foilIndex),
+          foilIndex);
+      }
+
+      canvas.SaveAs(
+        (outputDirectory + "/RecoSpaceSelectedDeltaZBySelectedFoil_Page" +
+         std::to_string(pageNumber) + ".pdf").c_str());
+    }
+  }
+
   inline void drawStoppingTargetBoxXY()
   {
     TBox stoppingTargetBox(-kStoppingTargetOuterRadius,
@@ -206,7 +302,19 @@ namespace twoelectronplots
       return false;
     }
 
-    ensureOutputDirectory(outputDirectory + "/placeholder.pdf");
+    ensureDirectoryPath(outputDirectory);
+    const std::string monteCarloTruthDirectory =
+      outputDirectory + "/MonteCarloTruth";
+    const std::string rawRecoDirectory =
+      outputDirectory + "/RawReco";
+    const std::string anglesDirectory =
+      outputDirectory + "/Angles";
+    const std::string deltaZVsFoilDirectory =
+      outputDirectory + "/DeltaZVsFoil";
+    ensureDirectoryPath(monteCarloTruthDirectory);
+    ensureDirectoryPath(rawRecoDirectory);
+    ensureDirectoryPath(anglesDirectory);
+    ensureDirectoryPath(deltaZVsFoilDirectory);
 
     TH1F* hMCTruthOriginT = get1DHistogram(*histogramFile,
                                            "hMCTruthRank0DownstreamElectronOriginT");
@@ -269,6 +377,9 @@ namespace twoelectronplots
     TH2F* hRecoVertexAbsLineParameterST = get2DHistogram(
       *histogramFile,
       "hRecoTwoElectronVertexAbsLineParameterST");
+    TH2F* hRecoTrackMultiplicityVsDeltaZ = get2DHistogram(
+      *histogramFile,
+      "hRecoTrackMultiplicityVsDeltaZ");
     TH1F* hRecoVertexTruthDeltaX = get1DHistogram(*histogramFile,
                                                    "hRecoTruthVertexDeltaX");
     TH1F* hRecoVertexTruthDeltaY = get1DHistogram(*histogramFile,
@@ -310,6 +421,20 @@ namespace twoelectronplots
     TGraph* gRecoSpaceSelectedSharedFoilNumberVsDeltaZ =
       getGraph(*histogramFile,
                "gRecoSpaceSelectedSharedFoilNumberVsDeltaZ");
+    std::vector<TH1F*> hRecoSpaceSelectedDeltaZBySelectedFoil;
+    hRecoSpaceSelectedDeltaZBySelectedFoil.reserve(kSelectedFoilCount);
+    bool allSelectedFoilDeltaZHistogramsPresent = true;
+    for (int foilIndex = 0; foilIndex < kSelectedFoilCount; ++foilIndex)
+    {
+      TH1F* histogram =
+        get1DHistogram(*histogramFile,
+                       selectedFoilDeltaZHistogramName(foilIndex));
+      hRecoSpaceSelectedDeltaZBySelectedFoil.push_back(histogram);
+      if (histogram == nullptr)
+      {
+        allSelectedFoilDeltaZHistogramsPresent = false;
+      }
+    }
     TGraph* gRecoSpaceSelectedSharedFoilCountVsDeltaZ =
       getGraph(*histogramFile,
                "gRecoSpaceSelectedSharedFoilCountVsDeltaZ");
@@ -406,6 +531,7 @@ namespace twoelectronplots
         hRecoVertexAbsLineParameterT == nullptr ||
         hRecoVertexLineParameterST == nullptr ||
         hRecoVertexAbsLineParameterST == nullptr ||
+        hRecoTrackMultiplicityVsDeltaZ == nullptr ||
         hRecoVertexFoilIndexMatchedXY == nullptr ||
         hRecoVertexFoilIndexMatchedXZ == nullptr ||
         hRecoVertexFoilIndexMatchedYZ == nullptr ||
@@ -422,6 +548,7 @@ namespace twoelectronplots
         gRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ == nullptr ||
         gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ == nullptr ||
         gRecoSpaceSelectedSharedFoilNumberVsDeltaZ == nullptr ||
+        !allSelectedFoilDeltaZHistogramsPresent ||
         gRecoSpaceSelectedSharedFoilCountVsDeltaZ == nullptr ||
         gRecoSpaceSelectedMaxFoilsHitVsDeltaZ == nullptr ||
         gRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ == nullptr ||
@@ -518,7 +645,8 @@ namespace twoelectronplots
     cTruthOrigin.cd(2); hMCTruthOriginX->Draw("HIST E");
     cTruthOrigin.cd(3); hMCTruthOriginY->Draw("HIST E");
     cTruthOrigin.cd(4); hMCTruthOriginZ->Draw("HIST E");
-    cTruthOrigin.SaveAs((outputDirectory + "/TruthOrigin_1D.pdf").c_str());
+    cTruthOrigin.SaveAs(
+      (monteCarloTruthDirectory + "/TruthOrigin_1D.pdf").c_str());
 
     TCanvas cTruthOriginMaps("cTruthOriginMaps",
                              "MC truth rank-0 downstream electron origin maps",
@@ -528,21 +656,23 @@ namespace twoelectronplots
     cTruthOriginMaps.cd(1); draw2DHistogram(hMCTruthOriginXY); drawStoppingTargetBoxXY();
     cTruthOriginMaps.cd(2); draw2DHistogram(hMCTruthOriginXZ); drawStoppingTargetBoxXZ();
     cTruthOriginMaps.cd(3); draw2DHistogram(hMCTruthOriginYZ); drawStoppingTargetBoxYZ();
-    cTruthOriginMaps.SaveAs((outputDirectory + "/TruthOrigin_2DMaps.pdf").c_str());
+    cTruthOriginMaps.SaveAs(
+      (monteCarloTruthDirectory + "/TruthOrigin_2DMaps.pdf").c_str());
 
     TCanvas cTruthMomentum("cTruthMomentum",
                            "MC truth rank-0 downstream electron momentum",
                            900,
                            700);
     hMCTruthMomentum->Draw("HIST E");
-    cTruthMomentum.SaveAs((outputDirectory + "/TruthMomentum.pdf").c_str());
+    cTruthMomentum.SaveAs(
+      (monteCarloTruthDirectory + "/TruthMomentum.pdf").c_str());
 
     TCanvas cRecoMomentum("cRecoMomentum",
                           "Selected reconstructed downstream electron momentum",
                           900,
                           700);
     hRecoMomentum->Draw("HIST E");
-    cRecoMomentum.SaveAs((outputDirectory + "/RecoMomentum.pdf").c_str());
+    cRecoMomentum.SaveAs((rawRecoDirectory + "/RecoMomentum.pdf").c_str());
 
     TCanvas cRecoVertex("cRecoVertex",
                         "Selected reconstructed two-electron vertex position",
@@ -553,7 +683,7 @@ namespace twoelectronplots
     cRecoVertex.cd(2); hRecoVertexY->Draw("HIST E");
     cRecoVertex.cd(3); hRecoVertexZ->Draw("HIST E");
     cRecoVertex.cd(4); hRecoVertexDistance->Draw("HIST E");
-    cRecoVertex.SaveAs((outputDirectory + "/RecoVertex_1D.pdf").c_str());
+    cRecoVertex.SaveAs((rawRecoDirectory + "/RecoVertex_1D.pdf").c_str());
 
     TCanvas cRecoVertexLineParameters(
       "cRecoVertexLineParameters",
@@ -570,7 +700,7 @@ namespace twoelectronplots
     cRecoVertexLineParameters.cd(4);
     hRecoVertexAbsLineParameterT->Draw("HIST E");
     cRecoVertexLineParameters.SaveAs(
-      (outputDirectory + "/RecoVertexLineParameters_1D.pdf").c_str());
+      (rawRecoDirectory + "/RecoVertexLineParameters_1D.pdf").c_str());
 
     TCanvas cRecoVertexLineParameterST(
       "cRecoVertexLineParameterST",
@@ -579,7 +709,7 @@ namespace twoelectronplots
       700);
     draw2DHistogram(hRecoVertexLineParameterST);
     cRecoVertexLineParameterST.SaveAs(
-      (outputDirectory + "/RecoVertexLineParameterST_2D.pdf").c_str());
+      (rawRecoDirectory + "/RecoVertexLineParameterST_2D.pdf").c_str());
 
     TCanvas cRecoVertexAbsLineParameterST(
       "cRecoVertexAbsLineParameterST",
@@ -588,7 +718,16 @@ namespace twoelectronplots
       700);
     draw2DHistogram(hRecoVertexAbsLineParameterST);
     cRecoVertexAbsLineParameterST.SaveAs(
-      (outputDirectory + "/RecoVertexAbsLineParameterST_2D.pdf").c_str());
+      (rawRecoDirectory + "/RecoVertexAbsLineParameterST_2D.pdf").c_str());
+
+    TCanvas cRecoTrackMultiplicityVsDeltaZ(
+      "cRecoTrackMultiplicityVsDeltaZ",
+      "Selected events: reconstructed track multiplicity vs #Delta z",
+      900,
+      700);
+    draw2DHistogram(hRecoTrackMultiplicityVsDeltaZ);
+    cRecoTrackMultiplicityVsDeltaZ.SaveAs(
+      (rawRecoDirectory + "/RecoTrackMultiplicityVsDeltaZ_2D.pdf").c_str());
 
     TCanvas cRecoVertexResidual("cRecoVertexResidual",
                                 "Selected reconstructed minus truth vertex residual",
@@ -599,7 +738,8 @@ namespace twoelectronplots
     cRecoVertexResidual.cd(2); hRecoVertexTruthDeltaY->Draw("HIST E");
     cRecoVertexResidual.cd(3); hRecoVertexTruthDeltaZ->Draw("HIST E");
     cRecoVertexResidual.cd(4); hRecoVertexTruthDistance->Draw("HIST E");
-    cRecoVertexResidual.SaveAs((outputDirectory + "/RecoVertexTruthResidualXYZ.pdf").c_str());
+    cRecoVertexResidual.SaveAs(
+      (rawRecoDirectory + "/RecoVertexTruthResidualXYZ.pdf").c_str());
 
     TCanvas cRecoVertexMaps("cRecoVertexMaps",
                             "Selected reconstructed two-electron vertex maps",
@@ -609,7 +749,8 @@ namespace twoelectronplots
     cRecoVertexMaps.cd(1); draw2DHistogram(hRecoVertexXY); drawStoppingTargetBoxXY();
     cRecoVertexMaps.cd(2); draw2DHistogram(hRecoVertexXZ); drawStoppingTargetBoxXZ();
     cRecoVertexMaps.cd(3); draw2DHistogram(hRecoVertexYZ); drawStoppingTargetBoxYZ();
-    cRecoVertexMaps.SaveAs((outputDirectory + "/RecoVertex_2DMaps.pdf").c_str());
+    cRecoVertexMaps.SaveAs(
+      (rawRecoDirectory + "/RecoVertex_2DMaps.pdf").c_str());
 
     TCanvas cRecoVertexAngularDiagnostics(
       "cRecoVertexAngularDiagnostics",
@@ -651,7 +792,7 @@ namespace twoelectronplots
                      kRecoTruthDeltaZPlotMin,
                      kRecoTruthDeltaZPlotMax);
     cRecoVertexAngularDiagnostics.SaveAs(
-      (outputDirectory + "/RecoVertexAngularDiagnostics.pdf").c_str());
+      (anglesDirectory + "/RecoVertexAngularDiagnostics.pdf").c_str());
 
     TCanvas cRecoVertexFoilIndexMatchedMaps(
       "cRecoVertexFoilIndexMatchedMaps",
@@ -666,7 +807,7 @@ namespace twoelectronplots
     cRecoVertexFoilIndexMatchedMaps.cd(3);
     draw2DHistogram(hRecoVertexFoilIndexMatchedYZ); drawStoppingTargetBoxYZ();
     cRecoVertexFoilIndexMatchedMaps.SaveAs(
-      (outputDirectory + "/RecoVertexFoilIndexMatched_2DMaps.pdf").c_str());
+      (deltaZVsFoilDirectory + "/RecoVertexFoilIndexMatched_2DMaps.pdf").c_str());
 
     TCanvas cRecoVertexFoilIndexMatchedResidual(
       "cRecoVertexFoilIndexMatchedResidual",
@@ -683,7 +824,7 @@ namespace twoelectronplots
     cRecoVertexFoilIndexMatchedResidual.cd(4);
     hRecoVertexFoilIndexMatchedTruthDistance->Draw("HIST E");
     cRecoVertexFoilIndexMatchedResidual.SaveAs(
-      (outputDirectory + "/RecoVertexFoilIndexMatchedTruthResidualXYZ.pdf").c_str());
+      (deltaZVsFoilDirectory + "/RecoVertexFoilIndexMatchedTruthResidualXYZ.pdf").c_str());
 
     TCanvas cRecoVertexDeltaTTest("cRecoVertexDeltaTTest",
                                   "Selected reconstructed two-electron segment time differences",
@@ -691,7 +832,7 @@ namespace twoelectronplots
                                   700);
     hRecoVertexSelectedSegmentDeltaTTest->Draw("HIST E");
     cRecoVertexDeltaTTest.SaveAs(
-      (outputDirectory + "/RecoVertexSelectedSegmentDeltaT_TEST.pdf").c_str());
+      (rawRecoDirectory + "/RecoVertexSelectedSegmentDeltaT_TEST.pdf").c_str());
 
     TCanvas cRecoVertexMinTimeDifferenceTest("cRecoVertexMinTimeDifferenceTest",
                                              "Minimum-|#Delta t| shared ST_Foils pair time difference",
@@ -699,7 +840,7 @@ namespace twoelectronplots
                                              700);
     hRecoVertexMinTimeDifferenceTest->Draw("HIST E");
     cRecoVertexMinTimeDifferenceTest.SaveAs(
-      (outputDirectory + "/RecoVertexMinTimeDifference_TEST.pdf").c_str());
+      (rawRecoDirectory + "/RecoVertexMinTimeDifference_TEST.pdf").c_str());
 
     TCanvas cRecoSharedFoilMaxLvsDeltaZ(
       "cRecoSharedFoilMaxLvsDeltaZ",
@@ -726,7 +867,7 @@ namespace twoelectronplots
                      kRecoTruthDeltaZPlotMin,
                      kRecoTruthDeltaZPlotMax);
     cRecoSharedFoilMaxLvsDeltaZ.SaveAs(
-      (outputDirectory + "/RecoSharedFoilMaxLvsDeltaZ_Scatter.pdf").c_str());
+      (deltaZVsFoilDirectory + "/RecoSharedFoilMaxLvsDeltaZ_Scatter.pdf").c_str());
 
     TCanvas cRecoSharedFoilAvgAbsLineParameterVsDeltaZ(
       "cRecoSharedFoilAvgAbsLineParameterVsDeltaZ",
@@ -753,7 +894,7 @@ namespace twoelectronplots
                      kRecoTruthDeltaZPlotMin,
                      kRecoTruthDeltaZPlotMax);
     cRecoSharedFoilAvgAbsLineParameterVsDeltaZ.SaveAs(
-      (outputDirectory + "/RecoSharedFoilAvgAbsLineParameterVsDeltaZ_Scatter.pdf").c_str());
+      (deltaZVsFoilDirectory + "/RecoSharedFoilAvgAbsLineParameterVsDeltaZ_Scatter.pdf").c_str());
 
     TCanvas cRecoSpaceSelectedDeltaZFoilRelations(
       "cRecoSpaceSelectedDeltaZFoilRelations",
@@ -786,7 +927,11 @@ namespace twoelectronplots
                      kRecoTruthDeltaZPlotMin,
                      kRecoTruthDeltaZPlotMax);
     cRecoSpaceSelectedDeltaZFoilRelations.SaveAs(
-      (outputDirectory + "/RecoSpaceSelectedDeltaZFoilRelations_Scatter.pdf").c_str());
+      (deltaZVsFoilDirectory + "/RecoSpaceSelectedDeltaZFoilRelations_Scatter.pdf").c_str());
+
+    saveDeltaZBySelectedFoilCanvases(
+      hRecoSpaceSelectedDeltaZBySelectedFoil,
+      deltaZVsFoilDirectory);
 
     TCanvas cTestRecoVertexMinTime("cTestRecoVertexMinTime",
                                    "TEST: minimum-|#Delta t| reconstructed two-electron vertex position",
@@ -798,7 +943,7 @@ namespace twoelectronplots
     cTestRecoVertexMinTime.cd(3); hTestRecoVertexMinTimeZ->Draw("HIST E");
     cTestRecoVertexMinTime.cd(4); hTestRecoVertexMinTimeDistance->Draw("HIST E");
     cTestRecoVertexMinTime.SaveAs(
-      (outputDirectory + "/RecoVertexMinTimeChoice_1D_TEST.pdf").c_str());
+      (rawRecoDirectory + "/RecoVertexMinTimeChoice_1D_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTimeResidual("cTestRecoVertexMinTimeResidual",
                                            "TEST: minimum-|#Delta t| reconstructed minus truth vertex residual",
@@ -814,7 +959,7 @@ namespace twoelectronplots
     cTestRecoVertexMinTimeResidual.cd(4);
     hTestRecoVertexMinTimeTruthDistance->Draw("HIST E");
     cTestRecoVertexMinTimeResidual.SaveAs(
-      (outputDirectory + "/RecoVertexMinTimeChoiceTruthResidualXYZ_TEST.pdf").c_str());
+      (rawRecoDirectory + "/RecoVertexMinTimeChoiceTruthResidualXYZ_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTimeMaps("cTestRecoVertexMinTimeMaps",
                                        "TEST: minimum-|#Delta t| reconstructed two-electron vertex maps",
@@ -828,7 +973,7 @@ namespace twoelectronplots
     cTestRecoVertexMinTimeMaps.cd(3);
     draw2DHistogram(hTestRecoVertexMinTimeYZ); drawStoppingTargetBoxYZ();
     cTestRecoVertexMinTimeMaps.SaveAs(
-      (outputDirectory + "/RecoVertexMinTimeChoice_2DMaps_TEST.pdf").c_str());
+      (rawRecoDirectory + "/RecoVertexMinTimeChoice_2DMaps_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTimeFoilIndexMatchedMaps(
       "cTestRecoVertexMinTimeFoilIndexMatchedMaps",
@@ -846,7 +991,7 @@ namespace twoelectronplots
     draw2DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedYZ);
     drawStoppingTargetBoxYZ();
     cTestRecoVertexMinTimeFoilIndexMatchedMaps.SaveAs(
-      (outputDirectory + "/RecoVertexMinTimeFoilIndexMatched_2DMaps_TEST.pdf").c_str());
+      (deltaZVsFoilDirectory + "/RecoVertexMinTimeFoilIndexMatched_2DMaps_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTimeFoilIndexMatchedResidual(
       "cTestRecoVertexMinTimeFoilIndexMatchedResidual",
@@ -863,7 +1008,7 @@ namespace twoelectronplots
     cTestRecoVertexMinTimeFoilIndexMatchedResidual.cd(4);
     hTestRecoVertexMinTimeFoilIndexMatchedTruthDistance->Draw("HIST E");
     cTestRecoVertexMinTimeFoilIndexMatchedResidual.SaveAs(
-      (outputDirectory + "/RecoVertexMinTimeFoilIndexMatchedTruthResidualXYZ_TEST.pdf").c_str());
+      (deltaZVsFoilDirectory + "/RecoVertexMinTimeFoilIndexMatchedTruthResidualXYZ_TEST.pdf").c_str());
 
     histogramFile->Close();
     delete histogramFile;

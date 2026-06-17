@@ -1298,6 +1298,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
   twoelectronhist::HistogramBook histograms = twoelectronhist::bookHistograms();
 
   Long64_t eventsWithRecoTracks = 0;
+  Long64_t eventsWithExactlyTwoRecoDownstreamElectronTracks = 0;
+  Long64_t eventsWithExactlyTwoRecoDownstreamElectronTracksAndGoodCalo = 0;
   Long64_t eventsWithAtLeastOneRecoTrackInMomentumWindow = 0;
   Long64_t eventsWithExactlyTwoRecoTracksInMomentumWindow = 0;
   Long64_t eventsWithExactlyTwoRecoTracksInMomentumWindowAndGoodCalo = 0;
@@ -1348,6 +1350,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
     }
 
     vector<RecoTrackDecision> candidateTrackDecisions;
+    size_t recoDownstreamElectronTracks = 0;
+    size_t recoDownstreamElectronTracksWithGoodCalo = 0;
     size_t recoTracksInMomentumWindow = 0;
     size_t recoTracksInMomentumWindowAndGoodCalo = 0;
 
@@ -1363,6 +1367,19 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
                           momentumCutMax,
                           requiredRecoPdg,
                           requireDownstream);
+
+      const bool trackIsDownstream =
+        trackSegments != nullptr &&
+        iTrack < trackSegments->size() &&
+        hasDownstreamTrackerMiddleSegment(trackSegments->at(iTrack));
+      if (track.pdg == 11 && trackIsDownstream)
+      {
+        ++recoDownstreamElectronTracks;
+        if (decision.hasCalo)
+        {
+          ++recoDownstreamElectronTracksWithGoodCalo;
+        }
+      }
 
       if (decision.momentumPass)
       {
@@ -1411,6 +1428,15 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
       if (decision.candidatePass)
       {
         candidateTrackDecisions.push_back(decision);
+      }
+    }
+
+    if (recoDownstreamElectronTracks == 2)
+    {
+      ++eventsWithExactlyTwoRecoDownstreamElectronTracks;
+      if (recoDownstreamElectronTracksWithGoodCalo == 2)
+      {
+        ++eventsWithExactlyTwoRecoDownstreamElectronTracksAndGoodCalo;
       }
     }
 
@@ -1584,6 +1610,10 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
         if (truthOrigin != nullptr)
         {
           const XYZVectorF truthToReco = selectedPairVertex.vertex - truthOrigin->pos;
+          twoelectronhist::fillRecoTrackMultiplicityVsDeltaZ(
+            histograms,
+            nTracks,
+            truthToReco.z());
           twoelectronhist::fillRecoVertexTruthResidual(histograms, truthToReco);
           fillSharedFoilDeltaZScatterDiagnostics(
             histograms,
@@ -1762,20 +1792,17 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
 
   cout << "===============================================================================" << endl;
   cout << "twoElectronTruthTrkSegVertexerComparer summary" << endl;
-  cout << "  events scanned: " << entriesToRead << endl;
+  cout << "  progressive event cut flow:" << endl;
+  cout << "    Ntuple events scanned: " << entriesToRead << endl;
+  cout << "    events with exactly two reconstructed downstream electron tracks"
+       << " (pdg == 11 and TT_Mid pz > 0): "
+       << eventsWithExactlyTwoRecoDownstreamElectronTracks << endl;
+  cout << "    events with exactly two reconstructed downstream electron tracks"
+       << " (pdg == 11 and TT_Mid pz > 0) and good calo hits: "
+       << eventsWithExactlyTwoRecoDownstreamElectronTracksAndGoodCalo << endl;
   cout << "  events with at least one reconstructed track: "
        << eventsWithRecoTracks << endl;
   cout << "  total reconstructed tracks: " << totalRecoTracks << endl;
-  cout << "  events with at least one reconstructed track with momentum in ["
-       << momentumCutMin << ", " << momentumCutMax << "] MeV/c: "
-       << eventsWithAtLeastOneRecoTrackInMomentumWindow << endl;
-  cout << "  events with exactly two reconstructed tracks with momentum in ["
-       << momentumCutMin << ", " << momentumCutMax << "] MeV/c: "
-       << eventsWithExactlyTwoRecoTracksInMomentumWindow << endl;
-  cout << "  events with exactly two reconstructed tracks with momentum in ["
-       << momentumCutMin << ", " << momentumCutMax
-       << "] MeV/c and a good calo hit: "
-       << eventsWithExactlyTwoRecoTracksInMomentumWindowAndGoodCalo << endl;
   cout << "  total candidate tracks: " << totalCandidateTracks << endl;
   cout << "  events with at least one candidate track: "
        << eventsWithAtLeastOneCandidateTrack << endl;
@@ -1832,6 +1859,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.recoVertexMomentumOpeningAngleEntries << endl;
   cout << "  histogram reconstructed vertex line-parameter entries: "
        << histograms.recoVertexLineParameterEntries << endl;
+  cout << "  histogram reconstructed track multiplicity vs delta-z entries: "
+       << histograms.recoTrackMultiplicityVsDeltaZEntries << endl;
   cout << "  histogram foil-index matched reconstructed vertex map entries: "
        << histograms.recoVertexFoilIndexMatchedEntries << endl;
   cout << "  histogram reconstructed-vs-truth vertex residual entries: "
