@@ -139,6 +139,9 @@
 ./twoElectronTruthTrkSegVertexerComparer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TAttBBox2D.h
 ./twoElectronTruthTrkSegVertexerComparer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TAttCanvas.h
 ./twoElectronTruthTrkSegVertexerComparer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TBox.h
+./twoElectronTruthTrkSegVertexerComparer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TLegend.h
+./twoElectronTruthTrkSegVertexerComparer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TPave.h
+./twoElectronTruthTrkSegVertexerComparer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TAttText.h
 ./twoElectronTruthTrkSegVertexerComparer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TSystem.h
 ./twoElectronTruthTrkSegVertexerComparer_C.so: /usr/include/fcntl.h
 ./twoElectronTruthTrkSegVertexerComparer_C.so: /cvmfs/mu2e.opensciencegrid.org/spackages/241207/spack/opt/spack/linux-almalinux9-x86_64_v2/gcc-13.3.0/root-6.32.06-oxcmy6p7yuy2lptemnwcizm3fov6fugi/include/root/TInetAddress.h

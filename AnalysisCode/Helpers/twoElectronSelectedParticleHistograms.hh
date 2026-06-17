@@ -156,6 +156,7 @@ namespace twoelectronhist
     TGraph* recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedSharedFoilNumberVsDeltaZ = nullptr;
+    TGraph* recoSpaceSelectedSharedFoilCountVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedMaxFoilsHitVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedOpeningAngleVsDeltaZ = nullptr;
@@ -205,6 +206,7 @@ namespace twoelectronhist
     Long64_t recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilNumberVsDeltaZEntries = 0;
+    Long64_t recoSpaceSelectedSharedFoilCountVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedMaxFoilsHitVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedOpeningAngleVsDeltaZEntries = 0;
@@ -493,6 +495,9 @@ namespace twoelectronhist
     book.recoSpaceSelectedSharedFoilNumberVsDeltaZ =
       makeGraph("gRecoSpaceSelectedSharedFoilNumberVsDeltaZ",
                 "Space-selected shared same-foil pair;shared foil sindex;#Delta z_{reco-truth} [mm]");
+    book.recoSpaceSelectedSharedFoilCountVsDeltaZ =
+      makeGraph("gRecoSpaceSelectedSharedFoilCountVsDeltaZ",
+                "Space-selected track pair;number of shared ST_Foils indices;#Delta z_{reco-truth} [mm]");
     book.recoSpaceSelectedMaxFoilsHitVsDeltaZ =
       makeGraph("gRecoSpaceSelectedMaxFoilsHitVsDeltaZ",
                 "Space-selected shared same-foil pair;max unique ST_Foils hit by either track;#Delta z_{reco-truth} [mm]");
@@ -1097,6 +1102,22 @@ namespace twoelectronhist
                             recoMinusTruthZ);
   }
 
+  inline void fillRecoSpaceSelectedSharedFoilCountVsDeltaZ(
+    HistogramBook& book,
+    int sharedFoilCount,
+    double recoMinusTruthZ)
+  {
+    if (sharedFoilCount < 0)
+    {
+      return;
+    }
+
+    fillDeltaZRelationGraph(book.recoSpaceSelectedSharedFoilCountVsDeltaZ,
+                            book.recoSpaceSelectedSharedFoilCountVsDeltaZEntries,
+                            static_cast<double>(sharedFoilCount),
+                            recoMinusTruthZ);
+  }
+
   inline void fillRecoSpaceSelectedMaxFoilsHitVsDeltaZ(
     HistogramBook& book,
     int maxFoilsHit,
@@ -1314,6 +1335,7 @@ namespace twoelectronhist
     writeOne(book.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ);
     writeOne(book.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ);
     writeOne(book.recoSpaceSelectedSharedFoilNumberVsDeltaZ);
+    writeOne(book.recoSpaceSelectedSharedFoilCountVsDeltaZ);
     writeOne(book.recoSpaceSelectedMaxFoilsHitVsDeltaZ);
     writeOne(book.recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ);
     writeOne(book.recoSpaceSelectedOpeningAngleVsDeltaZ);

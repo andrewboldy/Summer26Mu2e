@@ -655,6 +655,11 @@ namespace
     const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
     size_t trackIndex);
 
+  int countSharedStoppingTargetFoils(
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t firstTrackIndex,
+    size_t secondTrackIndex);
+
   void fillSpaceSelectedSharedFoilDeltaZRelationDiagnostics(
     twoelectronhist::HistogramBook& histograms,
     const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
@@ -681,6 +686,10 @@ namespace
       countUniqueStoppingTargetFoils(trackSegments, firstTrackIndex);
     const int secondTrackFoilsHit =
       countUniqueStoppingTargetFoils(trackSegments, secondTrackIndex);
+    const int sharedFoilsHit =
+      countSharedStoppingTargetFoils(trackSegments,
+                                     firstTrackIndex,
+                                     secondTrackIndex);
     const int maxFoilsHit = std::max(firstTrackFoilsHit, secondTrackFoilsHit);
     const int absDeltaFoilsHit =
       firstTrackFoilsHit >= secondTrackFoilsHit
@@ -693,6 +702,10 @@ namespace
     twoelectronhist::fillRecoSpaceSelectedSharedFoilNumberVsDeltaZ(
       histograms,
       firstSegment->sindex,
+      recoMinusTruthZ);
+    twoelectronhist::fillRecoSpaceSelectedSharedFoilCountVsDeltaZ(
+      histograms,
+      sharedFoilsHit,
       recoMinusTruthZ);
     twoelectronhist::fillRecoSpaceSelectedMaxFoilsHitVsDeltaZ(
       histograms,
@@ -773,6 +786,42 @@ namespace
       return 0;
     }
     return countUniqueStoppingTargetFoils(trackSegments->at(trackIndex));
+  }
+
+  int countSharedStoppingTargetFoils(
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t firstTrackIndex,
+    size_t secondTrackIndex)
+  {
+    if (trackSegments == nullptr ||
+        firstTrackIndex >= trackSegments->size() ||
+        secondTrackIndex >= trackSegments->size())
+    {
+      return 0;
+    }
+
+    set<int> firstFoilIndices;
+    for (const auto& segment : trackSegments->at(firstTrackIndex))
+    {
+      if (segment.sid == mu2e::SurfaceIdDetail::ST_Foils &&
+          segment.sindex >= 0)
+      {
+        firstFoilIndices.insert(segment.sindex);
+      }
+    }
+
+    set<int> sharedFoilIndices;
+    for (const auto& segment : trackSegments->at(secondTrackIndex))
+    {
+      if (segment.sid == mu2e::SurfaceIdDetail::ST_Foils &&
+          segment.sindex >= 0 &&
+          firstFoilIndices.find(segment.sindex) != firstFoilIndices.end())
+      {
+        sharedFoilIndices.insert(segment.sindex);
+      }
+    }
+
+    return static_cast<int>(sharedFoilIndices.size());
   }
 
   bool selectedSharedFoilSegmentsHaveOppositePz(
@@ -1249,6 +1298,9 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
   twoelectronhist::HistogramBook histograms = twoelectronhist::bookHistograms();
 
   Long64_t eventsWithRecoTracks = 0;
+  Long64_t eventsWithAtLeastOneRecoTrackInMomentumWindow = 0;
+  Long64_t eventsWithExactlyTwoRecoTracksInMomentumWindow = 0;
+  Long64_t eventsWithExactlyTwoRecoTracksInMomentumWindowAndGoodCalo = 0;
   Long64_t eventsWithAtLeastOneCandidateTrack = 0;
   Long64_t eventsWithExactlyTwoCandidateTracks = 0;
   Long64_t eventsWithAtLeastTwoCandidateTracks = 0;
@@ -1296,6 +1348,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
     }
 
     vector<RecoTrackDecision> candidateTrackDecisions;
+    size_t recoTracksInMomentumWindow = 0;
+    size_t recoTracksInMomentumWindowAndGoodCalo = 0;
 
     for (size_t iTrack = 0; iTrack < nTracks; ++iTrack)
     {
@@ -1309,6 +1363,15 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
                           momentumCutMax,
                           requiredRecoPdg,
                           requireDownstream);
+
+      if (decision.momentumPass)
+      {
+        ++recoTracksInMomentumWindow;
+        if (decision.hasCalo)
+        {
+          ++recoTracksInMomentumWindowAndGoodCalo;
+        }
+      }
 
       if (DO_FULL_PRINT)
       {
@@ -1349,6 +1412,19 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
       {
         candidateTrackDecisions.push_back(decision);
       }
+    }
+
+    if (recoTracksInMomentumWindow >= 1)
+    {
+      ++eventsWithAtLeastOneRecoTrackInMomentumWindow;
+    }
+    if (recoTracksInMomentumWindow == 2)
+    {
+      ++eventsWithExactlyTwoRecoTracksInMomentumWindow;
+    }
+    if (recoTracksInMomentumWindowAndGoodCalo == 2)
+    {
+      ++eventsWithExactlyTwoRecoTracksInMomentumWindowAndGoodCalo;
     }
 
     totalCandidateTracks += static_cast<Long64_t>(candidateTrackDecisions.size());
@@ -1690,6 +1766,16 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
   cout << "  events with at least one reconstructed track: "
        << eventsWithRecoTracks << endl;
   cout << "  total reconstructed tracks: " << totalRecoTracks << endl;
+  cout << "  events with at least one reconstructed track with momentum in ["
+       << momentumCutMin << ", " << momentumCutMax << "] MeV/c: "
+       << eventsWithAtLeastOneRecoTrackInMomentumWindow << endl;
+  cout << "  events with exactly two reconstructed tracks with momentum in ["
+       << momentumCutMin << ", " << momentumCutMax << "] MeV/c: "
+       << eventsWithExactlyTwoRecoTracksInMomentumWindow << endl;
+  cout << "  events with exactly two reconstructed tracks with momentum in ["
+       << momentumCutMin << ", " << momentumCutMax
+       << "] MeV/c and a good calo hit: "
+       << eventsWithExactlyTwoRecoTracksInMomentumWindowAndGoodCalo << endl;
   cout << "  total candidate tracks: " << totalCandidateTracks << endl;
   cout << "  events with at least one candidate track: "
        << eventsWithAtLeastOneCandidateTrack << endl;
@@ -1762,6 +1848,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries << endl;
   cout << "  scatter space-selected shared foil sindex vs delta-z points: "
        << histograms.recoSpaceSelectedSharedFoilNumberVsDeltaZEntries << endl;
+  cout << "  scatter space-selected number of shared foil indices vs delta-z points: "
+       << histograms.recoSpaceSelectedSharedFoilCountVsDeltaZEntries << endl;
   cout << "  scatter space-selected max unique foils hit vs delta-z points: "
        << histograms.recoSpaceSelectedMaxFoilsHitVsDeltaZEntries << endl;
   cout << "  scatter space-selected absolute foil-count difference vs delta-z points: "
