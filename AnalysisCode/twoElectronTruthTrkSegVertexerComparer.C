@@ -42,6 +42,15 @@
 //   over 30-55 MeV/c.  That plotting range is intentionally wider than the
 //   selection cut.
 //
+//   The macro also checks the reconstructed momentum z signs on the actual
+//   shared ST_Foils segment pair selected for the vertex:
+//
+//       one selected segment has mom.z() > 0
+//       the other selected segment has mom.z() < 0
+//
+//   This is deliberately less restrictive than classifying a full track by all
+//   of its stored foil crossings.
+//
 //   Within those selected events, the reconstructed vertex is built from the
 //   shared ST_Foils surface pair with the smallest closest-line distance.  A
 //   parallel TEST histogram set is also filled for the shared ST_Foils surface
@@ -119,6 +128,7 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -641,6 +651,63 @@ namespace
     }
   }
 
+  int countUniqueStoppingTargetFoils(
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t trackIndex);
+
+  void fillSpaceSelectedSharedFoilDeltaZRelationDiagnostics(
+    twoelectronhist::HistogramBook& histograms,
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t firstTrackIndex,
+    size_t secondTrackIndex,
+    const twoparticlevertexer::VertexResult& vertex,
+    const mu2e::TrkSegInfo* firstSegment,
+    const mu2e::TrkSegInfo* secondSegment,
+    const mu2e::SimInfo& truthOrigin)
+  {
+    if (!vertex.valid || firstSegment == nullptr || secondSegment == nullptr)
+    {
+      return;
+    }
+
+    if (firstSegment->sid != mu2e::SurfaceIdDetail::ST_Foils ||
+        secondSegment->sid != mu2e::SurfaceIdDetail::ST_Foils ||
+        firstSegment->sindex != secondSegment->sindex)
+    {
+      return;
+    }
+
+    const int firstTrackFoilsHit =
+      countUniqueStoppingTargetFoils(trackSegments, firstTrackIndex);
+    const int secondTrackFoilsHit =
+      countUniqueStoppingTargetFoils(trackSegments, secondTrackIndex);
+    const int maxFoilsHit = std::max(firstTrackFoilsHit, secondTrackFoilsHit);
+    const int absDeltaFoilsHit =
+      firstTrackFoilsHit >= secondTrackFoilsHit
+        ? firstTrackFoilsHit - secondTrackFoilsHit
+        : secondTrackFoilsHit - firstTrackFoilsHit;
+    const double recoMinusTruthZ = vertex.vertex.z() - truthOrigin.pos.z();
+    const double openingAngleDegrees =
+      twoelectronhist::momentumOpeningAngle(vertex);
+
+    twoelectronhist::fillRecoSpaceSelectedSharedFoilNumberVsDeltaZ(
+      histograms,
+      firstSegment->sindex,
+      recoMinusTruthZ);
+    twoelectronhist::fillRecoSpaceSelectedMaxFoilsHitVsDeltaZ(
+      histograms,
+      maxFoilsHit,
+      recoMinusTruthZ);
+    twoelectronhist::fillRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ(
+      histograms,
+      absDeltaFoilsHit,
+      recoMinusTruthZ);
+    twoelectronhist::fillRecoSpaceSelectedOpeningAngleVsDeltaZ(
+      histograms,
+      openingAngleDegrees,
+      recoMinusTruthZ);
+  }
+
   //============================================================================
   // Reconstruction Helpers
   //============================================================================
@@ -681,6 +748,53 @@ namespace
   {
     const mu2e::TrkSegInfo* trackerMiddleSegment = findTrackerMiddleSegment(segments);
     return trackerMiddleSegment != nullptr && trackerMiddleSegment->mom.z() > 0.0;
+  }
+
+  int countUniqueStoppingTargetFoils(const vector<mu2e::TrkSegInfo>& segments)
+  {
+    set<int> foilIndices;
+    for (const auto& segment : segments)
+    {
+      if (segment.sid == mu2e::SurfaceIdDetail::ST_Foils &&
+          segment.sindex >= 0)
+      {
+        foilIndices.insert(segment.sindex);
+      }
+    }
+    return static_cast<int>(foilIndices.size());
+  }
+
+  int countUniqueStoppingTargetFoils(
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t trackIndex)
+  {
+    if (trackSegments == nullptr || trackIndex >= trackSegments->size())
+    {
+      return 0;
+    }
+    return countUniqueStoppingTargetFoils(trackSegments->at(trackIndex));
+  }
+
+  bool selectedSharedFoilSegmentsHaveOppositePz(
+    const mu2e::TrkSegInfo* firstSegment,
+    const mu2e::TrkSegInfo* secondSegment)
+  {
+    if (firstSegment == nullptr || secondSegment == nullptr)
+    {
+      return false;
+    }
+
+    if (firstSegment->sid != mu2e::SurfaceIdDetail::ST_Foils ||
+        secondSegment->sid != mu2e::SurfaceIdDetail::ST_Foils ||
+        firstSegment->sindex != secondSegment->sindex)
+    {
+      return false;
+    }
+
+    const double firstPz = firstSegment->mom.z();
+    const double secondPz = secondSegment->mom.z();
+    return (firstPz > 0.0 && secondPz < 0.0) ||
+           (firstPz < 0.0 && secondPz > 0.0);
   }
 
   bool isRankZeroDownstreamElectron(const mu2e::SimInfo& sim, int electronPdg = 11)
@@ -1140,6 +1254,10 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
   Long64_t eventsWithAtLeastTwoCandidateTracks = 0;
   Long64_t totalRecoTracks = 0;
   Long64_t totalCandidateTracks = 0;
+  Long64_t histogramSelectedSpaceSharedFoilOppositePzPairs = 0;
+  Long64_t histogramSelectedSpaceSharedFoilOppositePzTracks = 0;
+  Long64_t histogramSelectedTimeSharedFoilOppositePzPairs = 0;
+  Long64_t histogramSelectedTimeSharedFoilOppositePzTracks = 0;
   Long64_t spaceSelectedVertexFoilIndexChecks = 0;
   Long64_t spaceSelectedVertexFoilIndexMatches = 0;
   Long64_t timeSelectedVertexFoilIndexChecks = 0;
@@ -1326,6 +1444,24 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
                                 histogramSelectedTimeVertexFoilIndexChecks,
                                 histogramSelectedTimeVertexFoilIndexMatches);
 
+      if (vertexWasAttempted &&
+          selectedPairVertex.valid &&
+          selectedSharedFoilSegmentsHaveOppositePz(firstVertexSegment,
+                                                  secondVertexSegment))
+      {
+        ++histogramSelectedSpaceSharedFoilOppositePzPairs;
+        histogramSelectedSpaceSharedFoilOppositePzTracks += 2;
+      }
+
+      if (vertexWasAttempted &&
+          timeSelectedPairVertex.valid &&
+          selectedSharedFoilSegmentsHaveOppositePz(firstTimeVertexSegment,
+                                                  secondTimeVertexSegment))
+      {
+        ++histogramSelectedTimeSharedFoilOppositePzPairs;
+        histogramSelectedTimeSharedFoilOppositePzTracks += 2;
+      }
+
       vector<size_t> selectedTrackIndices;
       selectedTrackIndices.push_back(candidateTrackDecisions.at(0).trackIndex);
       selectedTrackIndices.push_back(candidateTrackDecisions.at(1).trackIndex);
@@ -1380,6 +1516,15 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
             secondVertexSegment,
             *truthOrigin,
             SharedFoilDeltaZScatterCategory::kSpaceSelectedPair);
+          fillSpaceSelectedSharedFoilDeltaZRelationDiagnostics(
+            histograms,
+            trackSegments,
+            firstVertexTrackIndex,
+            secondVertexTrackIndex,
+            selectedPairVertex,
+            firstVertexSegment,
+            secondVertexSegment,
+            *truthOrigin);
 
           if (selectedPairVertexFoilCheck.valid &&
               selectedPairVertexFoilCheck.matchesSharedFoilIndex)
@@ -1552,6 +1697,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << eventsWithExactlyTwoCandidateTracks << endl;
   cout << "  events with at least two candidate tracks: "
        << eventsWithAtLeastTwoCandidateTracks << endl;
+  cout << "  histogram-selected space vertices with opposite-pz selected shared ST_Foils pair: "
+       << histogramSelectedSpaceSharedFoilOppositePzPairs << endl;
+  cout << "  histogram-selected tracks in opposite-pz space selected shared ST_Foils pairs: "
+       << histogramSelectedSpaceSharedFoilOppositePzTracks << endl;
+  cout << "  histogram-selected TEST minimum-time vertices with opposite-pz selected shared ST_Foils pair: "
+       << histogramSelectedTimeSharedFoilOppositePzPairs << endl;
+  cout << "  histogram-selected tracks in opposite-pz TEST minimum-time selected shared ST_Foils pairs: "
+       << histogramSelectedTimeSharedFoilOppositePzTracks << endl;
   const vector<double>& configuredFoilCentersZ =
     configuredStoppingTargetFoilCentersZ();
   if (!configuredFoilCentersZ.empty())
@@ -1607,6 +1760,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZEntries << endl;
   cout << "  scatter space-selected shared same-foil (|s|+|t|)/2 vs delta-z points: "
        << histograms.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries << endl;
+  cout << "  scatter space-selected shared foil sindex vs delta-z points: "
+       << histograms.recoSpaceSelectedSharedFoilNumberVsDeltaZEntries << endl;
+  cout << "  scatter space-selected max unique foils hit vs delta-z points: "
+       << histograms.recoSpaceSelectedMaxFoilsHitVsDeltaZEntries << endl;
+  cout << "  scatter space-selected absolute foil-count difference vs delta-z points: "
+       << histograms.recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZEntries << endl;
+  cout << "  scatter space-selected opening angle vs delta-z points: "
+       << histograms.recoSpaceSelectedOpeningAngleVsDeltaZEntries << endl;
   cout << "  histogram TEST minimum-time reconstructed vertex entries: "
        << histograms.testRecoVertexMinTimeEntries << endl;
   cout << "  histogram TEST minimum-time momentum theta-pair entries: "

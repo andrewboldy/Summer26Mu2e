@@ -49,6 +49,12 @@ namespace twoelectronplots
   constexpr double kAverageAbsLineParameterPlotMax = 1200.0;
   constexpr double kRecoTruthDeltaZPlotMin = -1000.0;
   constexpr double kRecoTruthDeltaZPlotMax = 1000.0;
+  constexpr double kSharedFoilIndexPlotMin = -0.5;
+  constexpr double kSharedFoilIndexPlotMax = 36.5;
+  constexpr double kFoilCountPlotMin = -0.5;
+  constexpr double kFoilCountPlotMax = 37.5;
+  constexpr double kOpeningAngleDegreesPlotMin = 0.0;
+  constexpr double kOpeningAngleDegreesPlotMax = 180.0;
 
   inline void ensureOutputDirectory(const std::string& outputPath)
   {
@@ -300,6 +306,18 @@ namespace twoelectronplots
     TGraph* gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ =
       getGraph(*histogramFile,
                "gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ");
+    TGraph* gRecoSpaceSelectedSharedFoilNumberVsDeltaZ =
+      getGraph(*histogramFile,
+               "gRecoSpaceSelectedSharedFoilNumberVsDeltaZ");
+    TGraph* gRecoSpaceSelectedMaxFoilsHitVsDeltaZ =
+      getGraph(*histogramFile,
+               "gRecoSpaceSelectedMaxFoilsHitVsDeltaZ");
+    TGraph* gRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ =
+      getGraph(*histogramFile,
+               "gRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ");
+    TGraph* gRecoSpaceSelectedOpeningAngleVsDeltaZ =
+      getGraph(*histogramFile,
+               "gRecoSpaceSelectedOpeningAngleVsDeltaZ");
     TH1F* hTestRecoVertexMinTimeX = get1DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeX");
@@ -399,6 +417,10 @@ namespace twoelectronplots
         gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ == nullptr ||
         gRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ == nullptr ||
         gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ == nullptr ||
+        gRecoSpaceSelectedSharedFoilNumberVsDeltaZ == nullptr ||
+        gRecoSpaceSelectedMaxFoilsHitVsDeltaZ == nullptr ||
+        gRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ == nullptr ||
+        gRecoSpaceSelectedOpeningAngleVsDeltaZ == nullptr ||
         hTestRecoVertexMinTimeX == nullptr ||
         hTestRecoVertexMinTimeY == nullptr ||
         hTestRecoVertexMinTimeZ == nullptr ||
@@ -460,6 +482,10 @@ namespace twoelectronplots
                       kBlue + 1);
     styleScatterGraph(gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ,
                       kGreen + 2);
+    styleScatterGraph(gRecoSpaceSelectedSharedFoilNumberVsDeltaZ, kAzure + 2);
+    styleScatterGraph(gRecoSpaceSelectedMaxFoilsHitVsDeltaZ, kOrange + 7);
+    styleScatterGraph(gRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ, kViolet + 1);
+    styleScatterGraph(gRecoSpaceSelectedOpeningAngleVsDeltaZ, kRed + 1);
     style1DHistogram(hTestRecoVertexMinTimeX);
     style1DHistogram(hTestRecoVertexMinTimeY);
     style1DHistogram(hTestRecoVertexMinTimeZ);
@@ -713,6 +739,39 @@ namespace twoelectronplots
                      kRecoTruthDeltaZPlotMax);
     cRecoSpaceSelectedAvgAbsLineParameterVsDeltaZ.SaveAs(
       (outputDirectory + "/RecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ_Scatter.pdf").c_str());
+
+    TCanvas cRecoSpaceSelectedDeltaZRelations(
+      "cRecoSpaceSelectedDeltaZRelations",
+      "Space-selected shared same-foil pair: #Delta z relation diagnostics",
+      1600,
+      1200);
+    cRecoSpaceSelectedDeltaZRelations.Divide(2, 2);
+    cRecoSpaceSelectedDeltaZRelations.cd(1);
+    drawScatterGraph(gRecoSpaceSelectedSharedFoilNumberVsDeltaZ,
+                     kSharedFoilIndexPlotMin,
+                     kSharedFoilIndexPlotMax,
+                     kRecoTruthDeltaZPlotMin,
+                     kRecoTruthDeltaZPlotMax);
+    cRecoSpaceSelectedDeltaZRelations.cd(2);
+    drawScatterGraph(gRecoSpaceSelectedMaxFoilsHitVsDeltaZ,
+                     kFoilCountPlotMin,
+                     kFoilCountPlotMax,
+                     kRecoTruthDeltaZPlotMin,
+                     kRecoTruthDeltaZPlotMax);
+    cRecoSpaceSelectedDeltaZRelations.cd(3);
+    drawScatterGraph(gRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ,
+                     kFoilCountPlotMin,
+                     kFoilCountPlotMax,
+                     kRecoTruthDeltaZPlotMin,
+                     kRecoTruthDeltaZPlotMax);
+    cRecoSpaceSelectedDeltaZRelations.cd(4);
+    drawScatterGraph(gRecoSpaceSelectedOpeningAngleVsDeltaZ,
+                     kOpeningAngleDegreesPlotMin,
+                     kOpeningAngleDegreesPlotMax,
+                     kRecoTruthDeltaZPlotMin,
+                     kRecoTruthDeltaZPlotMax);
+    cRecoSpaceSelectedDeltaZRelations.SaveAs(
+      (outputDirectory + "/RecoSpaceSelectedDeltaZRelations_Scatter.pdf").c_str());
 
     TCanvas cRecoMinTimeAvgAbsLineParameterVsDeltaZTest(
       "cRecoMinTimeAvgAbsLineParameterVsDeltaZTest",

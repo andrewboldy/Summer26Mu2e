@@ -42,6 +42,7 @@
 //   - positions are in mm
 //   - momenta are in MeV/c
 //   - times are in ns
+//   - angles are in degrees
 //   - EventNtuple SimInfo and TrkSegInfo positions are in tracker/detector
 //     coordinates, consistent with the existing vertexer macros
 //
@@ -66,6 +67,7 @@
 namespace twoelectronhist
 {
   constexpr double kPi = 3.14159265358979323846;
+  constexpr double kRadiansToDegrees = 180.0 / kPi;
 
   // Histogram ranges are kept in one config object so later tuning does not
   // touch the event-selection code.  The default position bounds match the
@@ -79,7 +81,7 @@ namespace twoelectronhist
 
     int angleBins = 180;
     double thetaMin = 0.0;
-    double thetaMax = kPi;
+    double thetaMax = 180.0;
 
     int timeBins = 200;
     double timeMin = 0.0;
@@ -153,6 +155,10 @@ namespace twoelectronhist
     TGraph* recoSpaceSelectedSharedFoilMaxLvsDeltaZ = nullptr;
     TGraph* recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ = nullptr;
+    TGraph* recoSpaceSelectedSharedFoilNumberVsDeltaZ = nullptr;
+    TGraph* recoSpaceSelectedMaxFoilsHitVsDeltaZ = nullptr;
+    TGraph* recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ = nullptr;
+    TGraph* recoSpaceSelectedOpeningAngleVsDeltaZ = nullptr;
     TH1F* testRecoVertexMinTimeX = nullptr;
     TH1F* testRecoVertexMinTimeY = nullptr;
     TH1F* testRecoVertexMinTimeZ = nullptr;
@@ -198,6 +204,10 @@ namespace twoelectronhist
     Long64_t recoSpaceSelectedSharedFoilMaxLvsDeltaZEntries = 0;
     Long64_t recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries = 0;
+    Long64_t recoSpaceSelectedSharedFoilNumberVsDeltaZEntries = 0;
+    Long64_t recoSpaceSelectedMaxFoilsHitVsDeltaZEntries = 0;
+    Long64_t recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZEntries = 0;
+    Long64_t recoSpaceSelectedOpeningAngleVsDeltaZEntries = 0;
     Long64_t testRecoVertexMinTimeEntries = 0;
     Long64_t testRecoVertexMinTimeMomentumThetaEntries = 0;
     Long64_t testRecoVertexMinTimeMomentumOpeningAngleEntries = 0;
@@ -368,7 +378,7 @@ namespace twoelectronhist
              config.zMax);
     book.recoVertexSpaceSelectedMomentumTheta1Theta2 =
       make2D("hRecoTwoElectronVertexSpaceSelectedMomentumTheta1Theta2",
-             "Space-selected shared ST_Foils momentum polar angles;#theta_{1} [rad];#theta_{2} [rad]",
+             "Space-selected shared ST_Foils momentum polar angles;#theta_{1} [deg];#theta_{2} [deg]",
              config.angleBins,
              config.thetaMin,
              config.thetaMax,
@@ -377,7 +387,7 @@ namespace twoelectronhist
              config.thetaMax);
     book.recoVertexSpaceSelectedMomentumOpeningAngle =
       make1D("hRecoTwoElectronVertexSpaceSelectedMomentumOpeningAngle",
-             "Space-selected shared ST_Foils momentum opening angle;opening angle [rad];entries",
+             "Space-selected shared ST_Foils momentum opening angle;opening angle [deg];entries",
              config.angleBins,
              config.thetaMin,
              config.thetaMax);
@@ -480,6 +490,18 @@ namespace twoelectronhist
     book.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ =
       makeGraph("gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ",
                 "Space-selected shared same-foil pair;(|s|+|t|)/2 [mm];#Delta z_{reco-truth} [mm]");
+    book.recoSpaceSelectedSharedFoilNumberVsDeltaZ =
+      makeGraph("gRecoSpaceSelectedSharedFoilNumberVsDeltaZ",
+                "Space-selected shared same-foil pair;shared foil sindex;#Delta z_{reco-truth} [mm]");
+    book.recoSpaceSelectedMaxFoilsHitVsDeltaZ =
+      makeGraph("gRecoSpaceSelectedMaxFoilsHitVsDeltaZ",
+                "Space-selected shared same-foil pair;max unique ST_Foils hit by either track;#Delta z_{reco-truth} [mm]");
+    book.recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ =
+      makeGraph("gRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ",
+                "Space-selected shared same-foil pair;|N_{foils,1}-N_{foils,2}|;#Delta z_{reco-truth} [mm]");
+    book.recoSpaceSelectedOpeningAngleVsDeltaZ =
+      makeGraph("gRecoSpaceSelectedOpeningAngleVsDeltaZ",
+                "Space-selected shared same-foil pair;opening angle [deg];#Delta z_{reco-truth} [mm]");
     book.testRecoVertexMinTimeX =
       make1D("hTESTRecoTwoElectronVertexMinTimeX",
              "TEST: minimum-|#Delta t| shared ST_Foils reconstructed vertex x;x_{vtx} [mm];entries",
@@ -527,7 +549,7 @@ namespace twoelectronhist
              config.zMax);
     book.testRecoVertexMinTimeMomentumTheta1Theta2 =
       make2D("hTESTRecoTwoElectronVertexMinTimeMomentumTheta1Theta2",
-             "TEST: minimum-|#Delta t| shared ST_Foils momentum polar angles;#theta_{1} [rad];#theta_{2} [rad]",
+             "TEST: minimum-|#Delta t| shared ST_Foils momentum polar angles;#theta_{1} [deg];#theta_{2} [deg]",
              config.angleBins,
              config.thetaMin,
              config.thetaMax,
@@ -536,7 +558,7 @@ namespace twoelectronhist
              config.thetaMax);
     book.testRecoVertexMinTimeMomentumOpeningAngle =
       make1D("hTESTRecoTwoElectronVertexMinTimeMomentumOpeningAngle",
-             "TEST: minimum-|#Delta t| shared ST_Foils momentum opening angle;opening angle [rad];entries",
+             "TEST: minimum-|#Delta t| shared ST_Foils momentum opening angle;opening angle [deg];entries",
              config.angleBins,
              config.thetaMin,
              config.thetaMax);
@@ -771,7 +793,8 @@ namespace twoelectronhist
     const double transverseMomentumDirection =
       std::sqrt(line.unitDirection.x() * line.unitDirection.x() +
                 line.unitDirection.y() * line.unitDirection.y());
-    return std::atan2(transverseMomentumDirection, line.unitDirection.z());
+    return kRadiansToDegrees *
+           std::atan2(transverseMomentumDirection, line.unitDirection.z());
   }
 
   inline bool fillMomentumThetaPair(
@@ -807,7 +830,7 @@ namespace twoelectronhist
       vertex.firstLine.unitDirection.Dot(vertex.secondLine.unitDirection);
     const double clampedDotProduct =
       std::max(-1.0, std::min(1.0, directionDotProduct));
-    return std::acos(clampedDotProduct);
+    return kRadiansToDegrees * std::acos(clampedDotProduct);
   }
 
   inline bool fillMomentumOpeningAngle(
@@ -1038,6 +1061,90 @@ namespace twoelectronhist
     ++book.testRecoMinTimeSharedFoilAvgAbsLineParameterVsDeltaZEntries;
   }
 
+  inline bool validDeltaZRelationInputs(double xValue, double recoMinusTruthZ)
+  {
+    return std::isfinite(xValue) && std::isfinite(recoMinusTruthZ);
+  }
+
+  inline void fillDeltaZRelationGraph(TGraph* graph,
+                                      Long64_t& entries,
+                                      double xValue,
+                                      double recoMinusTruthZ)
+  {
+    if (graph == nullptr ||
+        !validDeltaZRelationInputs(xValue, recoMinusTruthZ))
+    {
+      return;
+    }
+
+    graph->SetPoint(graph->GetN(), xValue, recoMinusTruthZ);
+    ++entries;
+  }
+
+  inline void fillRecoSpaceSelectedSharedFoilNumberVsDeltaZ(
+    HistogramBook& book,
+    int sharedFoilIndex,
+    double recoMinusTruthZ)
+  {
+    if (sharedFoilIndex < 0)
+    {
+      return;
+    }
+
+    fillDeltaZRelationGraph(book.recoSpaceSelectedSharedFoilNumberVsDeltaZ,
+                            book.recoSpaceSelectedSharedFoilNumberVsDeltaZEntries,
+                            static_cast<double>(sharedFoilIndex),
+                            recoMinusTruthZ);
+  }
+
+  inline void fillRecoSpaceSelectedMaxFoilsHitVsDeltaZ(
+    HistogramBook& book,
+    int maxFoilsHit,
+    double recoMinusTruthZ)
+  {
+    if (maxFoilsHit < 0)
+    {
+      return;
+    }
+
+    fillDeltaZRelationGraph(book.recoSpaceSelectedMaxFoilsHitVsDeltaZ,
+                            book.recoSpaceSelectedMaxFoilsHitVsDeltaZEntries,
+                            static_cast<double>(maxFoilsHit),
+                            recoMinusTruthZ);
+  }
+
+  inline void fillRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ(
+    HistogramBook& book,
+    int absDeltaFoilsHit,
+    double recoMinusTruthZ)
+  {
+    if (absDeltaFoilsHit < 0)
+    {
+      return;
+    }
+
+    fillDeltaZRelationGraph(book.recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ,
+                            book.recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZEntries,
+                            static_cast<double>(absDeltaFoilsHit),
+                            recoMinusTruthZ);
+  }
+
+  inline void fillRecoSpaceSelectedOpeningAngleVsDeltaZ(
+    HistogramBook& book,
+    double openingAngleDegrees,
+    double recoMinusTruthZ)
+  {
+    if (openingAngleDegrees < 0.0)
+    {
+      return;
+    }
+
+    fillDeltaZRelationGraph(book.recoSpaceSelectedOpeningAngleVsDeltaZ,
+                            book.recoSpaceSelectedOpeningAngleVsDeltaZEntries,
+                            openingAngleDegrees,
+                            recoMinusTruthZ);
+  }
+
   inline void fillRecoVertexMinTimeChoiceTest(
     HistogramBook& book,
     const twoparticlevertexer::VertexResult& vertex)
@@ -1206,6 +1313,10 @@ namespace twoelectronhist
     writeOne(book.recoSpaceSelectedSharedFoilMaxLvsDeltaZ);
     writeOne(book.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ);
     writeOne(book.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ);
+    writeOne(book.recoSpaceSelectedSharedFoilNumberVsDeltaZ);
+    writeOne(book.recoSpaceSelectedMaxFoilsHitVsDeltaZ);
+    writeOne(book.recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ);
+    writeOne(book.recoSpaceSelectedOpeningAngleVsDeltaZ);
     writeOne(book.testRecoVertexMinTimeX);
     writeOne(book.testRecoVertexMinTimeY);
     writeOne(book.testRecoVertexMinTimeZ);
