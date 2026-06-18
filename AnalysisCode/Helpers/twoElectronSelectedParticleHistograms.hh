@@ -167,6 +167,7 @@ namespace twoelectronhist
     TGraph* recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedSharedFoilNumberVsDeltaZ = nullptr;
     std::vector<TH1F*> recoSpaceSelectedDeltaZBySelectedFoil;
+    TH1F* recoSelectedDownstreamElectronTrackCountByFoil = nullptr;
     std::vector<TH1F*> recoSelectedTrackFoilIntersectionZByFoil;
     TGraph* recoSpaceSelectedSharedFoilCountVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedMaxFoilsHitVsDeltaZ = nullptr;
@@ -220,6 +221,7 @@ namespace twoelectronhist
     Long64_t recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilNumberVsDeltaZEntries = 0;
     std::vector<Long64_t> recoSpaceSelectedDeltaZBySelectedFoilEntries;
+    Long64_t recoSelectedDownstreamElectronTrackCountByFoilEntries = 0;
     std::vector<Long64_t> recoSelectedTrackFoilIntersectionZByFoilEntries;
     Long64_t recoSelectedTrackFoilIntersectionZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilCountVsDeltaZEntries = 0;
@@ -536,6 +538,12 @@ namespace twoelectronhist
                config.recoTruthDeltaZMin,
                config.recoTruthDeltaZMax));
     }
+    book.recoSelectedDownstreamElectronTrackCountByFoil =
+      make1D("hRecoSelectedDownstreamElectronTrackCountByFoil",
+             "Selected downstream e^{-} tracks by ST_Foils sindex;foil sindex;selected track count",
+             config.stoppingTargetFoils,
+             -0.5,
+             static_cast<double>(config.stoppingTargetFoils) - 0.5);
     book.recoSelectedTrackFoilIntersectionZByFoil.reserve(
       config.stoppingTargetFoils);
     book.recoSelectedTrackFoilIntersectionZByFoilEntries.assign(
@@ -1229,6 +1237,22 @@ namespace twoelectronhist
     ++book.recoSelectedTrackFoilIntersectionZEntries;
   }
 
+  inline void fillRecoSelectedDownstreamElectronTrackCountForFoil(
+    HistogramBook& book,
+    int foilIndex)
+  {
+    if (book.recoSelectedDownstreamElectronTrackCountByFoil == nullptr ||
+        foilIndex < 0 ||
+        foilIndex >= book.config.stoppingTargetFoils)
+    {
+      return;
+    }
+
+    book.recoSelectedDownstreamElectronTrackCountByFoil->Fill(
+      static_cast<double>(foilIndex));
+    ++book.recoSelectedDownstreamElectronTrackCountByFoilEntries;
+  }
+
   inline void fillRecoSelectedTrackFoilIntersectionZByFoil(
     HistogramBook& book,
     const std::vector<std::vector<mu2e::TrkSegInfo>>* trackSegments,
@@ -1246,6 +1270,7 @@ namespace twoelectronhist
         continue;
       }
 
+      std::set<int> foilIndicesForTrack;
       for (const auto& segment : trackSegments->at(trackIndex))
       {
         if (segment.sid != mu2e::SurfaceIdDetail::ST_Foils)
@@ -1256,6 +1281,17 @@ namespace twoelectronhist
         fillRecoSelectedTrackFoilIntersectionZForFoil(book,
                                                       segment.sindex,
                                                       segment.pos.z());
+        if (segment.sindex >= 0 &&
+            segment.sindex < book.config.stoppingTargetFoils)
+        {
+          foilIndicesForTrack.insert(segment.sindex);
+        }
+      }
+
+      for (const int foilIndex : foilIndicesForTrack)
+      {
+        fillRecoSelectedDownstreamElectronTrackCountForFoil(book,
+                                                            foilIndex);
       }
     }
   }
@@ -1498,6 +1534,7 @@ namespace twoelectronhist
     {
       writeOne(histogram);
     }
+    writeOne(book.recoSelectedDownstreamElectronTrackCountByFoil);
     for (TH1F* histogram : book.recoSelectedTrackFoilIntersectionZByFoil)
     {
       writeOne(histogram);
@@ -1543,4 +1580,3 @@ namespace twoelectronhist
 }
 
 #endif
-

@@ -73,6 +73,11 @@ namespace twoelectronplots
            std::to_string(foilIndex);
   }
 
+  inline std::string selectedDownstreamElectronTrackCountByFoilHistogramName()
+  {
+    return "hRecoSelectedDownstreamElectronTrackCountByFoil";
+  }
+
   inline void ensureDirectoryPath(const std::string& directoryPath)
   {
     if (!directoryPath.empty() && gSystem != nullptr)
@@ -228,6 +233,28 @@ namespace twoelectronplots
     histogram->SetLineWidth(2);
     histogram->SetStats(false);
     histogram->Draw("HIST E");
+  }
+
+  inline void drawSelectedDownstreamElectronTrackCountByFoilHistogram(
+    TH1* histogram)
+  {
+    if (histogram == nullptr)
+    {
+      return;
+    }
+
+    if (gPad != nullptr)
+    {
+      gPad->SetGridx();
+      gPad->SetGridy();
+    }
+
+    histogram->SetLineColor(kAzure + 2);
+    histogram->SetFillColor(kAzure - 9);
+    histogram->SetLineWidth(2);
+    histogram->SetMinimum(0.0);
+    histogram->SetStats(false);
+    histogram->Draw("HIST");
   }
 
   inline void drawDeltaZBySelectedFoilSurfaceView(TH2F& surfaceHistogram,
@@ -821,6 +848,9 @@ namespace twoelectronplots
         allSelectedFoilDeltaZHistogramsPresent = false;
       }
     }
+    TH1F* hRecoSelectedDownstreamElectronTrackCountByFoil =
+      get1DHistogram(*histogramFile,
+                     selectedDownstreamElectronTrackCountByFoilHistogramName());
     std::vector<TH1F*> hRecoSelectedTrackFoilIntersectionZByFoil;
     hRecoSelectedTrackFoilIntersectionZByFoil.reserve(kSelectedFoilCount);
     bool allSelectedTrackFoilIntersectionZHistogramsPresent = true;
@@ -949,6 +979,7 @@ namespace twoelectronplots
         gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ == nullptr ||
         gRecoSpaceSelectedSharedFoilNumberVsDeltaZ == nullptr ||
         !allSelectedFoilDeltaZHistogramsPresent ||
+        hRecoSelectedDownstreamElectronTrackCountByFoil == nullptr ||
         !allSelectedTrackFoilIntersectionZHistogramsPresent ||
         gRecoSpaceSelectedSharedFoilCountVsDeltaZ == nullptr ||
         gRecoSpaceSelectedMaxFoilsHitVsDeltaZ == nullptr ||
@@ -1020,6 +1051,7 @@ namespace twoelectronplots
     styleScatterGraph(gRecoSpaceSelectedMaxFoilsHitVsDeltaZ, kOrange + 7);
     styleScatterGraph(gRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ, kViolet + 1);
     styleScatterGraph(gRecoSpaceSelectedOpeningAngleVsDeltaZ, kRed + 1);
+    style1DHistogram(hRecoSelectedDownstreamElectronTrackCountByFoil);
     style1DHistogram(hTestRecoVertexMinTimeX);
     style1DHistogram(hTestRecoVertexMinTimeY);
     style1DHistogram(hTestRecoVertexMinTimeZ);
@@ -1074,6 +1106,17 @@ namespace twoelectronplots
                           700);
     hRecoMomentum->Draw("HIST E");
     cRecoMomentum.SaveAs((rawRecoDirectory + "/RecoMomentum.pdf").c_str());
+
+    TCanvas cRecoSelectedDownstreamElectronTrackCountByFoil(
+      "cRecoSelectedDownstreamElectronTrackCountByFoil",
+      "Selected downstream electron track count by foil",
+      1000,
+      700);
+    drawSelectedDownstreamElectronTrackCountByFoilHistogram(
+      hRecoSelectedDownstreamElectronTrackCountByFoil);
+    cRecoSelectedDownstreamElectronTrackCountByFoil.SaveAs(
+      (rawRecoFoilPlotsDirectory +
+       "/RecoSelectedDownstreamElectronTrackCountByFoil.pdf").c_str());
 
     saveSelectedTrackFoilIntersectionZCanvases(
       hRecoSelectedTrackFoilIntersectionZByFoil,
