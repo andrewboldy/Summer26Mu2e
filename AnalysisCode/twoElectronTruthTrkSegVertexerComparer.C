@@ -1874,6 +1874,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
   cout << "  histogram raw reco selected-track count-by-foil entries: "
        << histograms.recoSelectedDownstreamElectronTrackCountByFoilEntries
        << endl;
+  cout << "  histogram raw reco selected-track ST_Foils intersection momentum entries: "
+       << histograms.recoSelectedTrackFoilIntersectionMomentumEntries << endl;
   cout << "  histogram reconstructed vertex entries: "
        << histograms.recoVertexEntries << endl;
   cout << "  histogram reconstructed vertex momentum theta-pair entries: "

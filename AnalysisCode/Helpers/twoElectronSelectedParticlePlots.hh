@@ -73,6 +73,16 @@ namespace twoelectronplots
            std::to_string(foilIndex);
   }
 
+  inline std::string selectedTrackFoilIntersectionMomentumHistogramName(
+    const std::string& componentName,
+    int foilIndex)
+  {
+    return "hRecoSelectedTrackFoilIntersection" +
+           componentName +
+           "Foil" +
+           std::to_string(foilIndex);
+  }
+
   inline std::string selectedDownstreamElectronTrackCountByFoilHistogramName()
   {
     return "hRecoSelectedDownstreamElectronTrackCountByFoil";
@@ -255,6 +265,35 @@ namespace twoelectronplots
     histogram->SetMinimum(0.0);
     histogram->SetStats(false);
     histogram->Draw("HIST");
+  }
+
+  inline void drawFoilHistogramCollectionHistogram(
+    TH1* histogram,
+    int foilIndex,
+    const std::string& titlePrefix,
+    Color_t color)
+  {
+    if (histogram == nullptr)
+    {
+      return;
+    }
+
+    if (gPad != nullptr)
+    {
+      gPad->SetGridx();
+      gPad->SetGridy();
+    }
+
+    const Long64_t entries =
+      static_cast<Long64_t>(histogram->GetEntries());
+    const std::string title =
+      titlePrefix + ", foil sindex " + std::to_string(foilIndex) +
+      ", N = " + std::to_string(entries);
+    histogram->SetTitle(title.c_str());
+    histogram->SetLineColor(color);
+    histogram->SetLineWidth(2);
+    histogram->SetStats(false);
+    histogram->Draw("HIST E");
   }
 
   inline void drawDeltaZBySelectedFoilSurfaceView(TH2F& surfaceHistogram,
@@ -664,6 +703,205 @@ namespace twoelectronplots
       surfacePageNumber);
   }
 
+  inline void saveFoilHistogramCollectionSurfaceCanvas(
+    const std::vector<TH1F*>& foilHistograms,
+    const std::string& outputDirectory,
+    const std::string& fileStem,
+    const std::string& titlePrefix,
+    const std::string& yAxisTitle,
+    int pageNumber)
+  {
+    TH1F* templateHistogram = nullptr;
+    for (TH1F* histogram : foilHistograms)
+    {
+      if (histogram != nullptr)
+      {
+        templateHistogram = histogram;
+        break;
+      }
+    }
+
+    if (templateHistogram == nullptr ||
+        templateHistogram->GetXaxis() == nullptr)
+    {
+      return;
+    }
+
+    const std::string surfaceName = "h" + fileStem + "Surface";
+    const std::string surfaceTitle =
+      titlePrefix + " vs foil sindex;foil sindex;" +
+      yAxisTitle + ";entries";
+    TH2F surfaceHistogram(
+      surfaceName.c_str(),
+      surfaceTitle.c_str(),
+      static_cast<int>(foilHistograms.size()),
+      -0.5,
+      static_cast<double>(foilHistograms.size()) - 0.5,
+      templateHistogram->GetNbinsX(),
+      templateHistogram->GetXaxis()->GetXmin(),
+      templateHistogram->GetXaxis()->GetXmax());
+    surfaceHistogram.SetDirectory(nullptr);
+
+    for (size_t foilIndex = 0; foilIndex < foilHistograms.size(); ++foilIndex)
+    {
+      TH1F* histogram = foilHistograms.at(foilIndex);
+      if (histogram == nullptr)
+      {
+        continue;
+      }
+
+      const int nValueBins =
+        std::min(histogram->GetNbinsX(), surfaceHistogram.GetNbinsY());
+      for (int valueBin = 1; valueBin <= nValueBins; ++valueBin)
+      {
+        surfaceHistogram.SetBinContent(
+          static_cast<int>(foilIndex) + 1,
+          valueBin,
+          histogram->GetBinContent(valueBin));
+      }
+    }
+
+    surfaceHistogram.SetStats(false);
+    surfaceHistogram.SetContour(50);
+    if (surfaceHistogram.GetZaxis() != nullptr)
+    {
+      surfaceHistogram.GetZaxis()->SetTitleOffset(1.25);
+    }
+
+    const std::string canvasName = "c" + fileStem + "SurfaceViews";
+    TCanvas canvas(canvasName.c_str(),
+                   (titlePrefix + " surface views").c_str(),
+                   1800,
+                   1200);
+    canvas.Divide(3, 2);
+
+    canvas.cd(1);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: oblique;foil sindex;" + yAxisTitle + ";entries",
+      "SURF2",
+      30.0,
+      35.0,
+      true);
+
+    canvas.cd(2);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: top down;foil sindex;" + yAxisTitle + ";entries",
+      "SURF2",
+      90.0,
+      0.0,
+      true);
+
+    canvas.cd(3);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "2D histogram;foil sindex;" + yAxisTitle + ";entries",
+      "COLZ",
+      0.0,
+      0.0,
+      false);
+
+    canvas.cd(4);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: from low foil index;foil sindex;" + yAxisTitle + ";entries",
+      "SURF2",
+      20.0,
+      120.0,
+      true);
+
+    canvas.cd(5);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: from high foil index;foil sindex;" + yAxisTitle + ";entries",
+      "SURF2",
+      45.0,
+      240.0,
+      true);
+
+    canvas.cd(6);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: steep angle;foil sindex;" + yAxisTitle + ";entries",
+      "SURF2",
+      65.0,
+      315.0,
+      true);
+
+    canvas.SaveAs(
+      (outputDirectory + "/" + fileStem + "_Page" +
+       std::to_string(pageNumber) + "_SurfaceViews.pdf").c_str());
+  }
+
+  inline void saveFoilHistogramCollectionCanvases(
+    const std::vector<TH1F*>& foilHistograms,
+    const std::string& outputDirectory,
+    const std::string& fileStem,
+    const std::string& titlePrefix,
+    const std::string& yAxisTitle,
+    Color_t color)
+  {
+    std::vector<int> selectedFoilIndices;
+    selectedFoilIndices.reserve(foilHistograms.size());
+    for (size_t foilIndex = 0; foilIndex < foilHistograms.size(); ++foilIndex)
+    {
+      TH1F* histogram = foilHistograms.at(foilIndex);
+      if (histogram != nullptr && histogram->GetEntries() > 0.0)
+      {
+        selectedFoilIndices.push_back(static_cast<int>(foilIndex));
+      }
+    }
+
+    for (size_t firstFoilInCanvas = 0;
+         firstFoilInCanvas < selectedFoilIndices.size();
+         firstFoilInCanvas += kDeltaZByFoilPlotsPerCanvas)
+    {
+      const int pageNumber =
+        static_cast<int>(firstFoilInCanvas / kDeltaZByFoilPlotsPerCanvas) + 1;
+      const std::string canvasName =
+        "c" + fileStem + "Page" + std::to_string(pageNumber);
+      const std::string canvasTitle =
+        titlePrefix + ", page " + std::to_string(pageNumber);
+      TCanvas canvas(canvasName.c_str(), canvasTitle.c_str(), 1800, 1400);
+      canvas.Divide(3, 3);
+
+      for (int padIndex = 0;
+           padIndex < kDeltaZByFoilPlotsPerCanvas;
+           ++padIndex)
+      {
+        const size_t selectedIndex =
+          firstFoilInCanvas + static_cast<size_t>(padIndex);
+        if (selectedIndex >= selectedFoilIndices.size())
+        {
+          break;
+        }
+
+        const int foilIndex = selectedFoilIndices.at(selectedIndex);
+        canvas.cd(padIndex + 1);
+        drawFoilHistogramCollectionHistogram(foilHistograms.at(foilIndex),
+                                             foilIndex,
+                                             titlePrefix,
+                                             color);
+      }
+
+      canvas.SaveAs(
+        (outputDirectory + "/" + fileStem + "_Page" +
+         std::to_string(pageNumber) + ".pdf").c_str());
+    }
+
+    const int surfacePageNumber =
+      static_cast<int>(
+        (selectedFoilIndices.size() + kDeltaZByFoilPlotsPerCanvas - 1) /
+        kDeltaZByFoilPlotsPerCanvas) + 1;
+    saveFoilHistogramCollectionSurfaceCanvas(foilHistograms,
+                                             outputDirectory,
+                                             fileStem,
+                                             titlePrefix,
+                                             yAxisTitle,
+                                             surfacePageNumber);
+  }
+
   inline void drawStoppingTargetBoxXY()
   {
     TBox stoppingTargetBox(-kStoppingTargetOuterRadius,
@@ -719,6 +957,8 @@ namespace twoelectronplots
       outputDirectory + "/RawReco";
     const std::string rawRecoFoilPlotsDirectory =
       rawRecoDirectory + "/FoilPlots";
+    const std::string rawRecoFoilMomentumPlotsDirectory =
+      rawRecoFoilPlotsDirectory + "/FoilMomentums";
     const std::string anglesDirectory =
       outputDirectory + "/Angles";
     const std::string deltaZVsFoilDirectory =
@@ -726,6 +966,7 @@ namespace twoelectronplots
     ensureDirectoryPath(monteCarloTruthDirectory);
     ensureDirectoryPath(rawRecoDirectory);
     ensureDirectoryPath(rawRecoFoilPlotsDirectory);
+    ensureDirectoryPath(rawRecoFoilMomentumPlotsDirectory);
     ensureDirectoryPath(anglesDirectory);
     ensureDirectoryPath(deltaZVsFoilDirectory);
 
@@ -865,6 +1106,47 @@ namespace twoelectronplots
         allSelectedTrackFoilIntersectionZHistogramsPresent = false;
       }
     }
+    std::vector<TH1F*> hRecoSelectedTrackFoilIntersectionPxByFoil;
+    std::vector<TH1F*> hRecoSelectedTrackFoilIntersectionPyByFoil;
+    std::vector<TH1F*> hRecoSelectedTrackFoilIntersectionPzByFoil;
+    std::vector<TH1F*> hRecoSelectedTrackFoilIntersectionPByFoil;
+    hRecoSelectedTrackFoilIntersectionPxByFoil.reserve(kSelectedFoilCount);
+    hRecoSelectedTrackFoilIntersectionPyByFoil.reserve(kSelectedFoilCount);
+    hRecoSelectedTrackFoilIntersectionPzByFoil.reserve(kSelectedFoilCount);
+    hRecoSelectedTrackFoilIntersectionPByFoil.reserve(kSelectedFoilCount);
+    bool allSelectedTrackFoilIntersectionMomentumHistogramsPresent = true;
+    for (int foilIndex = 0; foilIndex < kSelectedFoilCount; ++foilIndex)
+    {
+      TH1F* pxHistogram =
+        get1DHistogram(*histogramFile,
+                       selectedTrackFoilIntersectionMomentumHistogramName(
+                         "Px",
+                         foilIndex));
+      TH1F* pyHistogram =
+        get1DHistogram(*histogramFile,
+                       selectedTrackFoilIntersectionMomentumHistogramName(
+                         "Py",
+                         foilIndex));
+      TH1F* pzHistogram =
+        get1DHistogram(*histogramFile,
+                       selectedTrackFoilIntersectionMomentumHistogramName(
+                         "Pz",
+                         foilIndex));
+      TH1F* pHistogram =
+        get1DHistogram(*histogramFile,
+                       selectedTrackFoilIntersectionMomentumHistogramName(
+                         "P",
+                         foilIndex));
+      hRecoSelectedTrackFoilIntersectionPxByFoil.push_back(pxHistogram);
+      hRecoSelectedTrackFoilIntersectionPyByFoil.push_back(pyHistogram);
+      hRecoSelectedTrackFoilIntersectionPzByFoil.push_back(pzHistogram);
+      hRecoSelectedTrackFoilIntersectionPByFoil.push_back(pHistogram);
+      if (pxHistogram == nullptr || pyHistogram == nullptr ||
+          pzHistogram == nullptr || pHistogram == nullptr)
+      {
+        allSelectedTrackFoilIntersectionMomentumHistogramsPresent = false;
+      }
+    }
     TGraph* gRecoSpaceSelectedSharedFoilCountVsDeltaZ =
       getGraph(*histogramFile,
                "gRecoSpaceSelectedSharedFoilCountVsDeltaZ");
@@ -981,6 +1263,7 @@ namespace twoelectronplots
         !allSelectedFoilDeltaZHistogramsPresent ||
         hRecoSelectedDownstreamElectronTrackCountByFoil == nullptr ||
         !allSelectedTrackFoilIntersectionZHistogramsPresent ||
+        !allSelectedTrackFoilIntersectionMomentumHistogramsPresent ||
         gRecoSpaceSelectedSharedFoilCountVsDeltaZ == nullptr ||
         gRecoSpaceSelectedMaxFoilsHitVsDeltaZ == nullptr ||
         gRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ == nullptr ||
@@ -1121,6 +1404,35 @@ namespace twoelectronplots
     saveSelectedTrackFoilIntersectionZCanvases(
       hRecoSelectedTrackFoilIntersectionZByFoil,
       rawRecoFoilPlotsDirectory);
+
+    saveFoilHistogramCollectionCanvases(
+      hRecoSelectedTrackFoilIntersectionPxByFoil,
+      rawRecoFoilMomentumPlotsDirectory,
+      "RecoSelectedTrackFoilIntersectionPxByFoil",
+      "Selected track ST_Foils intersection p_{x}",
+      "p_{x} [MeV/c]",
+      kRed + 1);
+    saveFoilHistogramCollectionCanvases(
+      hRecoSelectedTrackFoilIntersectionPyByFoil,
+      rawRecoFoilMomentumPlotsDirectory,
+      "RecoSelectedTrackFoilIntersectionPyByFoil",
+      "Selected track ST_Foils intersection p_{y}",
+      "p_{y} [MeV/c]",
+      kBlue + 1);
+    saveFoilHistogramCollectionCanvases(
+      hRecoSelectedTrackFoilIntersectionPzByFoil,
+      rawRecoFoilMomentumPlotsDirectory,
+      "RecoSelectedTrackFoilIntersectionPzByFoil",
+      "Selected track ST_Foils intersection p_{z}",
+      "p_{z} [MeV/c]",
+      kGreen + 2);
+    saveFoilHistogramCollectionCanvases(
+      hRecoSelectedTrackFoilIntersectionPByFoil,
+      rawRecoFoilMomentumPlotsDirectory,
+      "RecoSelectedTrackFoilIntersectionPByFoil",
+      "Selected track ST_Foils intersection |p|",
+      "|p| [MeV/c]",
+      kMagenta + 2);
 
     TCanvas cRecoVertex("cRecoVertex",
                         "Selected reconstructed two-electron vertex position",

@@ -80,6 +80,9 @@ namespace twoelectronhist
     int momentumBins = 140;
     double momentumMin = 30.0;
     double momentumMax = 55.0;
+    int momentumComponentBins = 240;
+    double momentumComponentMin = -60.0;
+    double momentumComponentMax = 60.0;
 
     int angleBins = 180;
     double thetaMin = 0.0;
@@ -169,6 +172,10 @@ namespace twoelectronhist
     std::vector<TH1F*> recoSpaceSelectedDeltaZBySelectedFoil;
     TH1F* recoSelectedDownstreamElectronTrackCountByFoil = nullptr;
     std::vector<TH1F*> recoSelectedTrackFoilIntersectionZByFoil;
+    std::vector<TH1F*> recoSelectedTrackFoilIntersectionPxByFoil;
+    std::vector<TH1F*> recoSelectedTrackFoilIntersectionPyByFoil;
+    std::vector<TH1F*> recoSelectedTrackFoilIntersectionPzByFoil;
+    std::vector<TH1F*> recoSelectedTrackFoilIntersectionPByFoil;
     TGraph* recoSpaceSelectedSharedFoilCountVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedMaxFoilsHitVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ = nullptr;
@@ -224,6 +231,8 @@ namespace twoelectronhist
     Long64_t recoSelectedDownstreamElectronTrackCountByFoilEntries = 0;
     std::vector<Long64_t> recoSelectedTrackFoilIntersectionZByFoilEntries;
     Long64_t recoSelectedTrackFoilIntersectionZEntries = 0;
+    std::vector<Long64_t> recoSelectedTrackFoilIntersectionMomentumByFoilEntries;
+    Long64_t recoSelectedTrackFoilIntersectionMomentumEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilCountVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedMaxFoilsHitVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZEntries = 0;
@@ -560,6 +569,56 @@ namespace twoelectronhist
                config.zBins,
                config.zMin,
                config.zMax));
+    }
+    book.recoSelectedTrackFoilIntersectionPxByFoil.reserve(
+      config.stoppingTargetFoils);
+    book.recoSelectedTrackFoilIntersectionPyByFoil.reserve(
+      config.stoppingTargetFoils);
+    book.recoSelectedTrackFoilIntersectionPzByFoil.reserve(
+      config.stoppingTargetFoils);
+    book.recoSelectedTrackFoilIntersectionPByFoil.reserve(
+      config.stoppingTargetFoils);
+    book.recoSelectedTrackFoilIntersectionMomentumByFoilEntries.assign(
+      config.stoppingTargetFoils,
+      0);
+    for (int foilIndex = 0; foilIndex < config.stoppingTargetFoils; ++foilIndex)
+    {
+      book.recoSelectedTrackFoilIntersectionPxByFoil.push_back(
+        make1D("hRecoSelectedTrackFoilIntersectionPxFoil" +
+                 std::to_string(foilIndex),
+               "Selected downstream e^{-} track ST_Foils intersection p_{x}, foil sindex " +
+                 std::to_string(foilIndex) +
+                 ";p_{x} [MeV/c];entries",
+               config.momentumComponentBins,
+               config.momentumComponentMin,
+               config.momentumComponentMax));
+      book.recoSelectedTrackFoilIntersectionPyByFoil.push_back(
+        make1D("hRecoSelectedTrackFoilIntersectionPyFoil" +
+                 std::to_string(foilIndex),
+               "Selected downstream e^{-} track ST_Foils intersection p_{y}, foil sindex " +
+                 std::to_string(foilIndex) +
+                 ";p_{y} [MeV/c];entries",
+               config.momentumComponentBins,
+               config.momentumComponentMin,
+               config.momentumComponentMax));
+      book.recoSelectedTrackFoilIntersectionPzByFoil.push_back(
+        make1D("hRecoSelectedTrackFoilIntersectionPzFoil" +
+                 std::to_string(foilIndex),
+               "Selected downstream e^{-} track ST_Foils intersection p_{z}, foil sindex " +
+                 std::to_string(foilIndex) +
+                 ";p_{z} [MeV/c];entries",
+               config.momentumComponentBins,
+               config.momentumComponentMin,
+               config.momentumComponentMax));
+      book.recoSelectedTrackFoilIntersectionPByFoil.push_back(
+        make1D("hRecoSelectedTrackFoilIntersectionPFoil" +
+                 std::to_string(foilIndex),
+               "Selected downstream e^{-} track ST_Foils intersection |p|, foil sindex " +
+                 std::to_string(foilIndex) +
+                 ";|p| [MeV/c];entries",
+               config.momentumBins,
+               config.momentumMin,
+               config.momentumMax));
     }
     book.recoSpaceSelectedSharedFoilCountVsDeltaZ =
       makeGraph("gRecoSpaceSelectedSharedFoilCountVsDeltaZ",
@@ -1253,6 +1312,60 @@ namespace twoelectronhist
     ++book.recoSelectedDownstreamElectronTrackCountByFoilEntries;
   }
 
+  inline void fillRecoSelectedTrackFoilIntersectionMomentumForFoil(
+    HistogramBook& book,
+    int foilIndex,
+    const XYZVectorF& momentum)
+  {
+    if (foilIndex < 0 ||
+        foilIndex >=
+          static_cast<int>(
+            book.recoSelectedTrackFoilIntersectionPxByFoil.size()) ||
+        foilIndex >=
+          static_cast<int>(
+            book.recoSelectedTrackFoilIntersectionPyByFoil.size()) ||
+        foilIndex >=
+          static_cast<int>(
+            book.recoSelectedTrackFoilIntersectionPzByFoil.size()) ||
+        foilIndex >=
+          static_cast<int>(
+            book.recoSelectedTrackFoilIntersectionPByFoil.size()))
+    {
+      return;
+    }
+
+    const double px = momentum.x();
+    const double py = momentum.y();
+    const double pz = momentum.z();
+    const double p = momentum.R();
+    if (!std::isfinite(px) || !std::isfinite(py) ||
+        !std::isfinite(pz) || !std::isfinite(p))
+    {
+      return;
+    }
+
+    TH1F* pxHistogram =
+      book.recoSelectedTrackFoilIntersectionPxByFoil.at(foilIndex);
+    TH1F* pyHistogram =
+      book.recoSelectedTrackFoilIntersectionPyByFoil.at(foilIndex);
+    TH1F* pzHistogram =
+      book.recoSelectedTrackFoilIntersectionPzByFoil.at(foilIndex);
+    TH1F* pHistogram =
+      book.recoSelectedTrackFoilIntersectionPByFoil.at(foilIndex);
+    if (pxHistogram == nullptr || pyHistogram == nullptr ||
+        pzHistogram == nullptr || pHistogram == nullptr)
+    {
+      return;
+    }
+
+    pxHistogram->Fill(px);
+    pyHistogram->Fill(py);
+    pzHistogram->Fill(pz);
+    pHistogram->Fill(p);
+    ++book.recoSelectedTrackFoilIntersectionMomentumByFoilEntries.at(foilIndex);
+    ++book.recoSelectedTrackFoilIntersectionMomentumEntries;
+  }
+
   inline void fillRecoSelectedTrackFoilIntersectionZByFoil(
     HistogramBook& book,
     const std::vector<std::vector<mu2e::TrkSegInfo>>* trackSegments,
@@ -1281,6 +1394,9 @@ namespace twoelectronhist
         fillRecoSelectedTrackFoilIntersectionZForFoil(book,
                                                       segment.sindex,
                                                       segment.pos.z());
+        fillRecoSelectedTrackFoilIntersectionMomentumForFoil(book,
+                                                             segment.sindex,
+                                                             segment.mom);
         if (segment.sindex >= 0 &&
             segment.sindex < book.config.stoppingTargetFoils)
         {
@@ -1539,6 +1655,22 @@ namespace twoelectronhist
     {
       writeOne(histogram);
     }
+    for (TH1F* histogram : book.recoSelectedTrackFoilIntersectionPxByFoil)
+    {
+      writeOne(histogram);
+    }
+    for (TH1F* histogram : book.recoSelectedTrackFoilIntersectionPyByFoil)
+    {
+      writeOne(histogram);
+    }
+    for (TH1F* histogram : book.recoSelectedTrackFoilIntersectionPzByFoil)
+    {
+      writeOne(histogram);
+    }
+    for (TH1F* histogram : book.recoSelectedTrackFoilIntersectionPByFoil)
+    {
+      writeOne(histogram);
+    }
     writeOne(book.recoSpaceSelectedSharedFoilCountVsDeltaZ);
     writeOne(book.recoSpaceSelectedMaxFoilsHitVsDeltaZ);
     writeOne(book.recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ);
@@ -1580,3 +1712,4 @@ namespace twoelectronhist
 }
 
 #endif
+
