@@ -29,9 +29,9 @@
 //
 // Histogram pass:
 //   The macro also writes a ROOT file containing the first comparison
-//   histograms.  Histogram entries are filled only for events with exactly two
-//   selected reconstructed downstream electron tracks.  In the default
-//   selection, each selected reconstructed track must:
+//   histograms.  Histogram entries are filled only for events that contain
+//   exactly two reconstructed downstream electron tracks total.  Both of those
+//   tracks must:
 //
 //       trk.pdg == 11
 //       have TT_Mid pz > 0
@@ -917,7 +917,6 @@ namespace
     bool downstreamPass = true;
     bool hasCalo = false;
     bool momentumPass = false;
-    bool candidatePass = false;
     MomentumChoice momentum;
   };
 
@@ -950,11 +949,6 @@ namespace
     decision.hasCalo = hasAssociatedCaloHit(trackCaloHits, trackIndex);
     decision.momentum = chooseRecoMomentum(trackCaloHits, trackSegments, trackIndex);
     decision.momentumPass = momentumInWindow(decision.momentum, momentumMin, momentumMax);
-    decision.candidatePass =
-      decision.pdgPass &&
-      decision.downstreamPass &&
-      decision.hasCalo &&
-      decision.momentumPass;
 
     return decision;
   }
@@ -1300,6 +1294,7 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
   Long64_t eventsWithRecoTracks = 0;
   Long64_t eventsWithExactlyTwoRecoDownstreamElectronTracks = 0;
   Long64_t eventsWithExactlyTwoRecoDownstreamElectronTracksAndGoodCalo = 0;
+  Long64_t eventsWithExactlyTwoRecoDownstreamElectronTracksGoodCaloAndMomentum = 0;
   Long64_t eventsWithAtLeastOneRecoTrackInMomentumWindow = 0;
   Long64_t eventsWithExactlyTwoRecoTracksInMomentumWindow = 0;
   Long64_t eventsWithExactlyTwoRecoTracksInMomentumWindowAndGoodCalo = 0;
@@ -1350,8 +1345,10 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
     }
 
     vector<RecoTrackDecision> candidateTrackDecisions;
+    vector<RecoTrackDecision> downstreamElectronTrackDecisions;
     size_t recoDownstreamElectronTracks = 0;
     size_t recoDownstreamElectronTracksWithGoodCalo = 0;
+    size_t recoDownstreamElectronTracksWithGoodCaloAndMomentum = 0;
     size_t recoTracksInMomentumWindow = 0;
     size_t recoTracksInMomentumWindowAndGoodCalo = 0;
 
@@ -1375,9 +1372,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
       if (track.pdg == 11 && trackIsDownstream)
       {
         ++recoDownstreamElectronTracks;
+        downstreamElectronTrackDecisions.push_back(decision);
         if (decision.hasCalo)
         {
           ++recoDownstreamElectronTracksWithGoodCalo;
+          if (decision.momentumPass)
+          {
+            ++recoDownstreamElectronTracksWithGoodCaloAndMomentum;
+          }
         }
       }
 
@@ -1421,13 +1423,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
         cout << "      reco PDG requirement: " << (decision.pdgPass ? "pass" : "fail") << endl;
         cout << "      downstream requirement: "
              << (decision.downstreamPass ? "pass" : "fail") << endl;
-        cout << "      selected candidate track: "
-             << (decision.candidatePass ? "yes" : "no") << endl;
-      }
-
-      if (decision.candidatePass)
-      {
-        candidateTrackDecisions.push_back(decision);
+        cout << "      passes per-track downstream-electron/calo/momentum cuts: "
+             << (track.pdg == 11 &&
+                 trackIsDownstream &&
+                 decision.hasCalo &&
+                 decision.momentumPass
+                   ? "yes"
+                   : "no")
+             << endl;
       }
     }
 
@@ -1437,6 +1440,11 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
       if (recoDownstreamElectronTracksWithGoodCalo == 2)
       {
         ++eventsWithExactlyTwoRecoDownstreamElectronTracksAndGoodCalo;
+        if (recoDownstreamElectronTracksWithGoodCaloAndMomentum == 2)
+        {
+          ++eventsWithExactlyTwoRecoDownstreamElectronTracksGoodCaloAndMomentum;
+          candidateTrackDecisions = downstreamElectronTrackDecisions;
+        }
       }
     }
 
@@ -1469,14 +1477,15 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
 
     if (DO_FULL_PRINT)
     {
-      cout << "  event candidate-track count: " << candidateTrackDecisions.size() << endl;
-      cout << "  event has two reconstructed tracks with requested properties: "
-           << (candidateTrackDecisions.size() >= 2 ? "yes" : "no") << endl;
+      cout << "  event final-candidate-track count: "
+           << candidateTrackDecisions.size() << endl;
+      cout << "  event passes final progressive candidate selection: "
+           << (candidateTrackDecisions.size() == 2 ? "yes" : "no") << endl;
     }
 
-    // Build vertices for the first two selected tracks when at least two pass.
-    // The printout uses these as diagnostic previews.  The histogram fill below
-    // is stricter and requires exactly two selected tracks in the event.
+    // Build vertices only for the final two candidate tracks.  The candidate
+    // vector is populated only after the full progressive event selection
+    // passes.
     bool vertexWasAttempted = false;
     const mu2e::TrkSegInfo* firstVertexSegment = nullptr;
     const mu2e::TrkSegInfo* secondVertexSegment = nullptr;
@@ -1526,11 +1535,10 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
                                 timeSelectedVertexFoilIndexMatches);
     }
 
-    // Histogram selection:
-    //   - exactly two selected reconstructed tracks in the event
-    //   - each selected track is a downstream electron by the reco selection
-    //   - each selected track has an associated calo hit
-    //   - each selected track has reconstructed momentum in the 50-53 MeV/c
+    // Candidate / histogram selection:
+    //   - exactly two reconstructed downstream electron tracks in the event
+    //   - both downstream electron tracks have associated calo hits
+    //   - both downstream electron tracks have reconstructed momentum in the
     //     selection cut configured above
     //
     // Only after this event-level reco selection passes do we fill any truth,
@@ -1800,15 +1808,20 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
   cout << "    events with exactly two reconstructed downstream electron tracks"
        << " (pdg == 11 and TT_Mid pz > 0) and good calo hits: "
        << eventsWithExactlyTwoRecoDownstreamElectronTracksAndGoodCalo << endl;
+  cout << "    events with exactly two reconstructed downstream electron tracks"
+       << " (pdg == 11 and TT_Mid pz > 0), good calo hits, and momentum in ["
+       << momentumCutMin << ", " << momentumCutMax << "] MeV/c: "
+       << eventsWithExactlyTwoRecoDownstreamElectronTracksGoodCaloAndMomentum
+       << endl;
   cout << "  events with at least one reconstructed track: "
        << eventsWithRecoTracks << endl;
   cout << "  total reconstructed tracks: " << totalRecoTracks << endl;
-  cout << "  total candidate tracks: " << totalCandidateTracks << endl;
-  cout << "  events with at least one candidate track: "
+  cout << "  total final-candidate tracks: " << totalCandidateTracks << endl;
+  cout << "  events with at least one final-candidate track: "
        << eventsWithAtLeastOneCandidateTrack << endl;
-  cout << "  events with exactly two candidate tracks: "
+  cout << "  events with exactly two final-candidate tracks: "
        << eventsWithExactlyTwoCandidateTracks << endl;
-  cout << "  events with at least two candidate tracks: "
+  cout << "  events with at least two final-candidate tracks: "
        << eventsWithAtLeastTwoCandidateTracks << endl;
   cout << "  histogram-selected space vertices with opposite-pz selected shared ST_Foils pair: "
        << histogramSelectedSpaceSharedFoilOppositePzPairs << endl;
@@ -1830,22 +1843,22 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
          << CURRENT_ST_GEOMETRY_DELTA_Z << " mm" << endl;
   }
   printVertexFoilIndexSummary(
-    "constructed first-two-candidate space vertex foil-index matches",
+    "constructed final-candidate space vertex foil-index matches",
     spaceSelectedVertexFoilIndexMatches,
     spaceSelectedVertexFoilIndexChecks);
   printVertexFoilIndexSummary(
-    "constructed first-two-candidate TEST minimum-time vertex foil-index matches",
+    "constructed final-candidate TEST minimum-time vertex foil-index matches",
     timeSelectedVertexFoilIndexMatches,
     timeSelectedVertexFoilIndexChecks);
   printVertexFoilIndexSummary(
-    "histogram-selected exactly-two-candidate space vertex foil-index matches",
+    "histogram-selected final-candidate space vertex foil-index matches",
     histogramSelectedSpaceVertexFoilIndexMatches,
     histogramSelectedSpaceVertexFoilIndexChecks);
   printVertexFoilIndexSummary(
-    "histogram-selected exactly-two-candidate TEST minimum-time vertex foil-index matches",
+    "histogram-selected final-candidate TEST minimum-time vertex foil-index matches",
     histogramSelectedTimeVertexFoilIndexMatches,
     histogramSelectedTimeVertexFoilIndexChecks);
-  cout << "  histogram-selected events, exactly two candidate tracks: "
+  cout << "  histogram-selected final-candidate events: "
        << histograms.selectedEvents << endl;
   cout << "  histogram MC truth entries, rank-0 downstream e-: "
        << histograms.mcTruthEntries << endl;

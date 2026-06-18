@@ -198,6 +198,79 @@ namespace twoelectronplots
     histogram->Draw("HIST E");
   }
 
+  inline void saveDeltaZBySelectedFoilSurfaceCanvas(
+    const std::vector<TH1F*>& deltaZBySelectedFoilHistograms,
+    const std::string& outputDirectory,
+    int pageNumber)
+  {
+    TH1F* templateHistogram = nullptr;
+    for (TH1F* histogram : deltaZBySelectedFoilHistograms)
+    {
+      if (histogram != nullptr)
+      {
+        templateHistogram = histogram;
+        break;
+      }
+    }
+
+    if (templateHistogram == nullptr ||
+        templateHistogram->GetXaxis() == nullptr)
+    {
+      return;
+    }
+
+    TH2F surfaceHistogram(
+      "hRecoSpaceSelectedDeltaZBySelectedFoilSurface",
+      "Space-selected #Delta z vs selected shared foil sindex;selected shared foil sindex;#Delta z_{reco-truth} [mm];entries",
+      static_cast<int>(deltaZBySelectedFoilHistograms.size()),
+      -0.5,
+      static_cast<double>(deltaZBySelectedFoilHistograms.size()) - 0.5,
+      templateHistogram->GetNbinsX(),
+      templateHistogram->GetXaxis()->GetXmin(),
+      templateHistogram->GetXaxis()->GetXmax());
+    surfaceHistogram.SetDirectory(nullptr);
+
+    for (size_t foilIndex = 0;
+         foilIndex < deltaZBySelectedFoilHistograms.size();
+         ++foilIndex)
+    {
+      TH1F* deltaZHistogram = deltaZBySelectedFoilHistograms.at(foilIndex);
+      if (deltaZHistogram == nullptr)
+      {
+        continue;
+      }
+
+      const int nDeltaZBins =
+        std::min(deltaZHistogram->GetNbinsX(),
+                 surfaceHistogram.GetNbinsY());
+      for (int deltaZBin = 1; deltaZBin <= nDeltaZBins; ++deltaZBin)
+      {
+        surfaceHistogram.SetBinContent(
+          static_cast<int>(foilIndex) + 1,
+          deltaZBin,
+          deltaZHistogram->GetBinContent(deltaZBin));
+      }
+    }
+
+    TCanvas canvas("cRecoSpaceSelectedDeltaZBySelectedFoilSurface",
+                   "Space-selected #Delta z by selected foil surface",
+                   1200,
+                   900);
+    canvas.SetRightMargin(0.18);
+    canvas.SetTheta(30.0);
+    canvas.SetPhi(35.0);
+    surfaceHistogram.SetStats(false);
+    surfaceHistogram.SetContour(50);
+    if (surfaceHistogram.GetZaxis() != nullptr)
+    {
+      surfaceHistogram.GetZaxis()->SetTitleOffset(1.25);
+    }
+    surfaceHistogram.Draw("SURF2");
+    canvas.SaveAs(
+      (outputDirectory + "/RecoSpaceSelectedDeltaZBySelectedFoil_Page" +
+       std::to_string(pageNumber) + "_Surface.pdf").c_str());
+  }
+
   inline void saveDeltaZBySelectedFoilCanvases(
     const std::vector<TH1F*>& deltaZBySelectedFoilHistograms,
     const std::string& outputDirectory)
@@ -252,6 +325,14 @@ namespace twoelectronplots
         (outputDirectory + "/RecoSpaceSelectedDeltaZBySelectedFoil_Page" +
          std::to_string(pageNumber) + ".pdf").c_str());
     }
+
+    const int surfacePageNumber =
+      static_cast<int>(
+        (selectedFoilIndices.size() + kDeltaZByFoilPlotsPerCanvas - 1) /
+        kDeltaZByFoilPlotsPerCanvas) + 1;
+    saveDeltaZBySelectedFoilSurfaceCanvas(deltaZBySelectedFoilHistograms,
+                                          outputDirectory,
+                                          surfacePageNumber);
   }
 
   inline void drawStoppingTargetBoxXY()

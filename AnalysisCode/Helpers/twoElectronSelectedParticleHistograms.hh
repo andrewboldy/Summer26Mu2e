@@ -34,8 +34,9 @@
 //
 //   The caller is responsible for enforcing the event-level reconstruction
 //   selection before calling the fill functions.  In the current comparer that
-//   means exactly two reconstructed downstream electron tracks, each with an
-//   associated calorimeter hit and reconstructed momentum in 50-53 MeV/c.
+//   means the event contains exactly two reconstructed downstream electron
+//   tracks total, and both have associated calorimeter hits and reconstructed
+//   momentum in 50-53 MeV/c.
 //   The momentum histogram range is intentionally wider: 30-55 MeV/c.
 //
 // Coordinate and unit conventions:
