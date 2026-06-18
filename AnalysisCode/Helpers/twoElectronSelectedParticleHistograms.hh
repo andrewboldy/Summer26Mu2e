@@ -63,6 +63,7 @@
 #include <TH2F.h>
 
 #include "EventNtuple/inc/SimInfo.hh"
+#include "EventNtuple/inc/TrkSegInfo.hh"
 #include "twoParticleVertexer.hh"
 
 namespace twoelectronhist
@@ -166,6 +167,7 @@ namespace twoelectronhist
     TGraph* recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedSharedFoilNumberVsDeltaZ = nullptr;
     std::vector<TH1F*> recoSpaceSelectedDeltaZBySelectedFoil;
+    std::vector<TH1F*> recoSelectedTrackFoilIntersectionZByFoil;
     TGraph* recoSpaceSelectedSharedFoilCountVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedMaxFoilsHitVsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ = nullptr;
@@ -218,6 +220,8 @@ namespace twoelectronhist
     Long64_t recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilNumberVsDeltaZEntries = 0;
     std::vector<Long64_t> recoSpaceSelectedDeltaZBySelectedFoilEntries;
+    std::vector<Long64_t> recoSelectedTrackFoilIntersectionZByFoilEntries;
+    Long64_t recoSelectedTrackFoilIntersectionZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilCountVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedMaxFoilsHitVsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedAbsDeltaFoilsHitVsDeltaZEntries = 0;
@@ -531,6 +535,23 @@ namespace twoelectronhist
                config.deltaZByFoilBins,
                config.recoTruthDeltaZMin,
                config.recoTruthDeltaZMax));
+    }
+    book.recoSelectedTrackFoilIntersectionZByFoil.reserve(
+      config.stoppingTargetFoils);
+    book.recoSelectedTrackFoilIntersectionZByFoilEntries.assign(
+      config.stoppingTargetFoils,
+      0);
+    for (int foilIndex = 0; foilIndex < config.stoppingTargetFoils; ++foilIndex)
+    {
+      book.recoSelectedTrackFoilIntersectionZByFoil.push_back(
+        make1D("hRecoSelectedTrackFoilIntersectionZFoil" +
+                 std::to_string(foilIndex),
+               "Selected downstream e^{-} track ST_Foils intersection z, foil sindex " +
+                 std::to_string(foilIndex) +
+                 ";z_{intersection} [mm];entries",
+               config.zBins,
+               config.zMin,
+               config.zMax));
     }
     book.recoSpaceSelectedSharedFoilCountVsDeltaZ =
       makeGraph("gRecoSpaceSelectedSharedFoilCountVsDeltaZ",
@@ -1182,6 +1203,63 @@ namespace twoelectronhist
                                                recoMinusTruthZ);
   }
 
+  inline void fillRecoSelectedTrackFoilIntersectionZForFoil(
+    HistogramBook& book,
+    int foilIndex,
+    double intersectionZ)
+  {
+    if (foilIndex < 0 ||
+        foilIndex >=
+          static_cast<int>(
+            book.recoSelectedTrackFoilIntersectionZByFoil.size()) ||
+        !std::isfinite(intersectionZ))
+    {
+      return;
+    }
+
+    TH1F* histogram =
+      book.recoSelectedTrackFoilIntersectionZByFoil.at(foilIndex);
+    if (histogram == nullptr)
+    {
+      return;
+    }
+
+    histogram->Fill(intersectionZ);
+    ++book.recoSelectedTrackFoilIntersectionZByFoilEntries.at(foilIndex);
+    ++book.recoSelectedTrackFoilIntersectionZEntries;
+  }
+
+  inline void fillRecoSelectedTrackFoilIntersectionZByFoil(
+    HistogramBook& book,
+    const std::vector<std::vector<mu2e::TrkSegInfo>>* trackSegments,
+    const std::vector<size_t>& selectedTrackIndices)
+  {
+    if (trackSegments == nullptr)
+    {
+      return;
+    }
+
+    for (const size_t trackIndex : selectedTrackIndices)
+    {
+      if (trackIndex >= trackSegments->size())
+      {
+        continue;
+      }
+
+      for (const auto& segment : trackSegments->at(trackIndex))
+      {
+        if (segment.sid != mu2e::SurfaceIdDetail::ST_Foils)
+        {
+          continue;
+        }
+
+        fillRecoSelectedTrackFoilIntersectionZForFoil(book,
+                                                      segment.sindex,
+                                                      segment.pos.z());
+      }
+    }
+  }
+
   inline void fillRecoSpaceSelectedSharedFoilCountVsDeltaZ(
     HistogramBook& book,
     int sharedFoilCount,
@@ -1417,6 +1495,10 @@ namespace twoelectronhist
     writeOne(book.recoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ);
     writeOne(book.recoSpaceSelectedSharedFoilNumberVsDeltaZ);
     for (TH1F* histogram : book.recoSpaceSelectedDeltaZBySelectedFoil)
+    {
+      writeOne(histogram);
+    }
+    for (TH1F* histogram : book.recoSelectedTrackFoilIntersectionZByFoil)
     {
       writeOne(histogram);
     }

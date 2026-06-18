@@ -1576,6 +1576,11 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
       selectedTrackIndices.push_back(candidateTrackDecisions.at(0).trackIndex);
       selectedTrackIndices.push_back(candidateTrackDecisions.at(1).trackIndex);
 
+      twoelectronhist::fillRecoSelectedTrackFoilIntersectionZByFoil(
+        histograms,
+        trackSegments,
+        selectedTrackIndices);
+
       const mu2e::SimInfo* truthOrigin =
         findRepresentativeTruthOrigin(truthSimByTrack, selectedTrackIndices, 11);
 
@@ -1864,6 +1869,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.mcTruthEntries << endl;
   cout << "  histogram reconstructed momentum entries: "
        << histograms.recoMomentumEntries << endl;
+  cout << "  histogram raw reco selected-track ST_Foils intersection-z entries: "
+       << histograms.recoSelectedTrackFoilIntersectionZEntries << endl;
   cout << "  histogram reconstructed vertex entries: "
        << histograms.recoVertexEntries << endl;
   cout << "  histogram reconstructed vertex momentum theta-pair entries: "

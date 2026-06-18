@@ -67,6 +67,12 @@ namespace twoelectronplots
            std::to_string(foilIndex);
   }
 
+  inline std::string selectedTrackFoilIntersectionZHistogramName(int foilIndex)
+  {
+    return "hRecoSelectedTrackFoilIntersectionZFoil" +
+           std::to_string(foilIndex);
+  }
+
   inline void ensureDirectoryPath(const std::string& directoryPath)
   {
     if (!directoryPath.empty() && gSystem != nullptr)
@@ -193,6 +199,32 @@ namespace twoelectronplots
       ", N = " + std::to_string(entries);
     histogram->SetTitle(title.c_str());
     histogram->SetLineColor(kBlue + 1);
+    histogram->SetLineWidth(2);
+    histogram->SetStats(false);
+    histogram->Draw("HIST E");
+  }
+
+  inline void drawSelectedTrackFoilIntersectionZHistogram(TH1* histogram,
+                                                          int foilIndex)
+  {
+    if (histogram == nullptr)
+    {
+      return;
+    }
+
+    if (gPad != nullptr)
+    {
+      gPad->SetGridx();
+      gPad->SetGridy();
+    }
+
+    const Long64_t entries =
+      static_cast<Long64_t>(histogram->GetEntries());
+    const std::string title =
+      "foil sindex " + std::to_string(foilIndex) +
+      ", N = " + std::to_string(entries);
+    histogram->SetTitle(title.c_str());
+    histogram->SetLineColor(kGreen + 2);
     histogram->SetLineWidth(2);
     histogram->SetStats(false);
     histogram->Draw("HIST E");
@@ -411,6 +443,200 @@ namespace twoelectronplots
                                           surfacePageNumber);
   }
 
+  inline void saveSelectedTrackFoilIntersectionZSurfaceCanvas(
+    const std::vector<TH1F*>& foilIntersectionZHistograms,
+    const std::string& outputDirectory,
+    int pageNumber)
+  {
+    TH1F* templateHistogram = nullptr;
+    for (TH1F* histogram : foilIntersectionZHistograms)
+    {
+      if (histogram != nullptr)
+      {
+        templateHistogram = histogram;
+        break;
+      }
+    }
+
+    if (templateHistogram == nullptr ||
+        templateHistogram->GetXaxis() == nullptr)
+    {
+      return;
+    }
+
+    TH2F surfaceHistogram(
+      "hRecoSelectedTrackFoilIntersectionZSurface",
+      "Selected downstream track ST_Foils intersection z vs foil sindex;foil sindex;z_{intersection} [mm];entries",
+      static_cast<int>(foilIntersectionZHistograms.size()),
+      -0.5,
+      static_cast<double>(foilIntersectionZHistograms.size()) - 0.5,
+      templateHistogram->GetNbinsX(),
+      templateHistogram->GetXaxis()->GetXmin(),
+      templateHistogram->GetXaxis()->GetXmax());
+    surfaceHistogram.SetDirectory(nullptr);
+
+    for (size_t foilIndex = 0;
+         foilIndex < foilIntersectionZHistograms.size();
+         ++foilIndex)
+    {
+      TH1F* intersectionZHistogram =
+        foilIntersectionZHistograms.at(foilIndex);
+      if (intersectionZHistogram == nullptr)
+      {
+        continue;
+      }
+
+      const int nIntersectionZBins =
+        std::min(intersectionZHistogram->GetNbinsX(),
+                 surfaceHistogram.GetNbinsY());
+      for (int intersectionZBin = 1;
+           intersectionZBin <= nIntersectionZBins;
+           ++intersectionZBin)
+      {
+        surfaceHistogram.SetBinContent(
+          static_cast<int>(foilIndex) + 1,
+          intersectionZBin,
+          intersectionZHistogram->GetBinContent(intersectionZBin));
+      }
+    }
+
+    surfaceHistogram.SetStats(false);
+    surfaceHistogram.SetContour(50);
+    if (surfaceHistogram.GetZaxis() != nullptr)
+    {
+      surfaceHistogram.GetZaxis()->SetTitleOffset(1.25);
+    }
+
+    TCanvas canvas("cRecoSelectedTrackFoilIntersectionZSurfaceViews",
+                   "Selected track foil-intersection z surface views",
+                   1800,
+                   1200);
+    canvas.Divide(3, 2);
+
+    canvas.cd(1);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: oblique;foil sindex;z_{intersection} [mm];entries",
+      "SURF2",
+      30.0,
+      35.0,
+      true);
+
+    canvas.cd(2);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: top down;foil sindex;z_{intersection} [mm];entries",
+      "SURF2",
+      90.0,
+      0.0,
+      true);
+
+    canvas.cd(3);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "2D histogram;foil sindex;z_{intersection} [mm];entries",
+      "COLZ",
+      0.0,
+      0.0,
+      false);
+
+    canvas.cd(4);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: from low foil index;foil sindex;z_{intersection} [mm];entries",
+      "SURF2",
+      20.0,
+      120.0,
+      true);
+
+    canvas.cd(5);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: from high foil index;foil sindex;z_{intersection} [mm];entries",
+      "SURF2",
+      45.0,
+      240.0,
+      true);
+
+    canvas.cd(6);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: steep angle;foil sindex;z_{intersection} [mm];entries",
+      "SURF2",
+      65.0,
+      315.0,
+      true);
+
+    canvas.SaveAs(
+      (outputDirectory + "/RecoSelectedTrackFoilIntersectionZByFoil_Page" +
+       std::to_string(pageNumber) + "_SurfaceViews.pdf").c_str());
+  }
+
+  inline void saveSelectedTrackFoilIntersectionZCanvases(
+    const std::vector<TH1F*>& foilIntersectionZHistograms,
+    const std::string& outputDirectory)
+  {
+    std::vector<int> selectedFoilIndices;
+    selectedFoilIndices.reserve(foilIntersectionZHistograms.size());
+    for (size_t foilIndex = 0;
+         foilIndex < foilIntersectionZHistograms.size();
+         ++foilIndex)
+    {
+      TH1F* histogram = foilIntersectionZHistograms.at(foilIndex);
+      if (histogram != nullptr && histogram->GetEntries() > 0.0)
+      {
+        selectedFoilIndices.push_back(static_cast<int>(foilIndex));
+      }
+    }
+
+    for (size_t firstFoilInCanvas = 0;
+         firstFoilInCanvas < selectedFoilIndices.size();
+         firstFoilInCanvas += kDeltaZByFoilPlotsPerCanvas)
+    {
+      const int pageNumber =
+        static_cast<int>(firstFoilInCanvas / kDeltaZByFoilPlotsPerCanvas) + 1;
+      const std::string canvasName =
+        "cRecoSelectedTrackFoilIntersectionZPage" +
+        std::to_string(pageNumber);
+      const std::string canvasTitle =
+        "Selected track foil-intersection z, page " +
+        std::to_string(pageNumber);
+      TCanvas canvas(canvasName.c_str(), canvasTitle.c_str(), 1800, 1400);
+      canvas.Divide(3, 3);
+
+      for (int padIndex = 0;
+           padIndex < kDeltaZByFoilPlotsPerCanvas;
+           ++padIndex)
+      {
+        const size_t selectedIndex =
+          firstFoilInCanvas + static_cast<size_t>(padIndex);
+        if (selectedIndex >= selectedFoilIndices.size())
+        {
+          break;
+        }
+
+        const int foilIndex = selectedFoilIndices.at(selectedIndex);
+        canvas.cd(padIndex + 1);
+        drawSelectedTrackFoilIntersectionZHistogram(
+          foilIntersectionZHistograms.at(foilIndex),
+          foilIndex);
+      }
+
+      canvas.SaveAs(
+        (outputDirectory + "/RecoSelectedTrackFoilIntersectionZByFoil_Page" +
+         std::to_string(pageNumber) + ".pdf").c_str());
+    }
+
+    const int surfacePageNumber =
+      static_cast<int>(
+        (selectedFoilIndices.size() + kDeltaZByFoilPlotsPerCanvas - 1) /
+        kDeltaZByFoilPlotsPerCanvas) + 1;
+    saveSelectedTrackFoilIntersectionZSurfaceCanvas(
+      foilIntersectionZHistograms,
+      outputDirectory,
+      surfacePageNumber);
+  }
+
   inline void drawStoppingTargetBoxXY()
   {
     TBox stoppingTargetBox(-kStoppingTargetOuterRadius,
@@ -464,12 +690,15 @@ namespace twoelectronplots
       outputDirectory + "/MonteCarloTruth";
     const std::string rawRecoDirectory =
       outputDirectory + "/RawReco";
+    const std::string rawRecoFoilPlotsDirectory =
+      rawRecoDirectory + "/FoilPlots";
     const std::string anglesDirectory =
       outputDirectory + "/Angles";
     const std::string deltaZVsFoilDirectory =
       outputDirectory + "/DeltaZVsFoil";
     ensureDirectoryPath(monteCarloTruthDirectory);
     ensureDirectoryPath(rawRecoDirectory);
+    ensureDirectoryPath(rawRecoFoilPlotsDirectory);
     ensureDirectoryPath(anglesDirectory);
     ensureDirectoryPath(deltaZVsFoilDirectory);
 
@@ -592,6 +821,20 @@ namespace twoelectronplots
         allSelectedFoilDeltaZHistogramsPresent = false;
       }
     }
+    std::vector<TH1F*> hRecoSelectedTrackFoilIntersectionZByFoil;
+    hRecoSelectedTrackFoilIntersectionZByFoil.reserve(kSelectedFoilCount);
+    bool allSelectedTrackFoilIntersectionZHistogramsPresent = true;
+    for (int foilIndex = 0; foilIndex < kSelectedFoilCount; ++foilIndex)
+    {
+      TH1F* histogram =
+        get1DHistogram(*histogramFile,
+                       selectedTrackFoilIntersectionZHistogramName(foilIndex));
+      hRecoSelectedTrackFoilIntersectionZByFoil.push_back(histogram);
+      if (histogram == nullptr)
+      {
+        allSelectedTrackFoilIntersectionZHistogramsPresent = false;
+      }
+    }
     TGraph* gRecoSpaceSelectedSharedFoilCountVsDeltaZ =
       getGraph(*histogramFile,
                "gRecoSpaceSelectedSharedFoilCountVsDeltaZ");
@@ -706,6 +949,7 @@ namespace twoelectronplots
         gRecoSpaceSelectedSharedFoilAvgAbsLineParameterVsDeltaZ == nullptr ||
         gRecoSpaceSelectedSharedFoilNumberVsDeltaZ == nullptr ||
         !allSelectedFoilDeltaZHistogramsPresent ||
+        !allSelectedTrackFoilIntersectionZHistogramsPresent ||
         gRecoSpaceSelectedSharedFoilCountVsDeltaZ == nullptr ||
         gRecoSpaceSelectedMaxFoilsHitVsDeltaZ == nullptr ||
         gRecoSpaceSelectedAbsDeltaFoilsHitVsDeltaZ == nullptr ||
@@ -830,6 +1074,10 @@ namespace twoelectronplots
                           700);
     hRecoMomentum->Draw("HIST E");
     cRecoMomentum.SaveAs((rawRecoDirectory + "/RecoMomentum.pdf").c_str());
+
+    saveSelectedTrackFoilIntersectionZCanvases(
+      hRecoSelectedTrackFoilIntersectionZByFoil,
+      rawRecoFoilPlotsDirectory);
 
     TCanvas cRecoVertex("cRecoVertex",
                         "Selected reconstructed two-electron vertex position",
