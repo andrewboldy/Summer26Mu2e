@@ -198,6 +198,29 @@ namespace twoelectronplots
     histogram->Draw("HIST E");
   }
 
+  inline void drawDeltaZBySelectedFoilSurfaceView(TH2F& surfaceHistogram,
+                                                  const std::string& title,
+                                                  const std::string& drawOption,
+                                                  double theta,
+                                                  double phi,
+                                                  bool setProjection)
+  {
+    if (gPad != nullptr)
+    {
+      gPad->SetRightMargin(0.16);
+      gPad->SetGridx();
+      gPad->SetGridy();
+      if (setProjection)
+      {
+        gPad->SetTheta(theta);
+        gPad->SetPhi(phi);
+      }
+    }
+
+    surfaceHistogram.SetTitle(title.c_str());
+    surfaceHistogram.DrawCopy(drawOption.c_str());
+  }
+
   inline void saveDeltaZBySelectedFoilSurfaceCanvas(
     const std::vector<TH1F*>& deltaZBySelectedFoilHistograms,
     const std::string& outputDirectory,
@@ -252,23 +275,76 @@ namespace twoelectronplots
       }
     }
 
-    TCanvas canvas("cRecoSpaceSelectedDeltaZBySelectedFoilSurface",
-                   "Space-selected #Delta z by selected foil surface",
-                   1200,
-                   900);
-    canvas.SetRightMargin(0.18);
-    canvas.SetTheta(30.0);
-    canvas.SetPhi(35.0);
     surfaceHistogram.SetStats(false);
     surfaceHistogram.SetContour(50);
     if (surfaceHistogram.GetZaxis() != nullptr)
     {
       surfaceHistogram.GetZaxis()->SetTitleOffset(1.25);
     }
-    surfaceHistogram.Draw("SURF2");
+
+    TCanvas canvas("cRecoSpaceSelectedDeltaZBySelectedFoilSurfaceViews",
+                   "Space-selected #Delta z by selected foil surface views",
+                   1800,
+                   1200);
+    canvas.Divide(3, 2);
+
+    canvas.cd(1);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: oblique;selected shared foil sindex;#Delta z_{reco-truth} [mm];entries",
+      "SURF2",
+      30.0,
+      35.0,
+      true);
+
+    canvas.cd(2);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: top down;selected shared foil sindex;#Delta z_{reco-truth} [mm];entries",
+      "SURF2",
+      90.0,
+      0.0,
+      true);
+
+    canvas.cd(3);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "2D histogram;selected shared foil sindex;#Delta z_{reco-truth} [mm];entries",
+      "COLZ",
+      0.0,
+      0.0,
+      false);
+
+    canvas.cd(4);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: from low foil index;selected shared foil sindex;#Delta z_{reco-truth} [mm];entries",
+      "SURF2",
+      20.0,
+      120.0,
+      true);
+
+    canvas.cd(5);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: from high foil index;selected shared foil sindex;#Delta z_{reco-truth} [mm];entries",
+      "SURF2",
+      45.0,
+      240.0,
+      true);
+
+    canvas.cd(6);
+    drawDeltaZBySelectedFoilSurfaceView(
+      surfaceHistogram,
+      "surface view: steep angle;selected shared foil sindex;#Delta z_{reco-truth} [mm];entries",
+      "SURF2",
+      65.0,
+      315.0,
+      true);
+
     canvas.SaveAs(
       (outputDirectory + "/RecoSpaceSelectedDeltaZBySelectedFoil_Page" +
-       std::to_string(pageNumber) + "_Surface.pdf").c_str());
+       std::to_string(pageNumber) + "_SurfaceViews.pdf").c_str());
   }
 
   inline void saveDeltaZBySelectedFoilCanvases(
