@@ -70,6 +70,49 @@
 //   the implementation.  The PDF plots are written under
 //   Plots/TruthVsRecoPlots/.
 //
+// Vertexing process:
+//   The vertexing part of this comparer is intentionally built from stored
+//   reconstructed track-surface intersections rather than refitting the tracks.
+//   The event loop first identifies the final two reconstructed-track
+//   candidates.  In the default analysis configuration, this means the event
+//   contains exactly two downstream electron tracks total, and both of those
+//   tracks have a usable calorimeter association and reconstructed momentum in
+//   the configured selection window.
+//
+//   Once the two selected tracks are known, their `trksegs` entries are scanned
+//   for shared stopping-target foil intersections:
+//
+//       segment.sid == mu2e::SurfaceIdDetail::ST_Foils
+//       first-track segment.sindex == second-track segment.sindex
+//
+//   Every same-foil segment pair is turned into two local straight-line states
+//   using `twoParticleVertexer::makeParticleStateFromTrackSegment`.  The line
+//   state uses the stored surface-intersection position and the local momentum
+//   direction at that surface.  The helper `vertexFromParticleStates` then
+//   finds the closest approach between those two lines and reports:
+//
+//       - the midpoint of the two closest-approach points, used as the vertex
+//       - the line-line distance
+//       - each line parameter at closest approach
+//       - the input-segment time difference
+//
+//   The nominal reconstructed vertex chooses the shared ST_Foils segment pair
+//   with the smallest closest-line distance.  A parallel TEST vertex is also
+//   formed by choosing the shared ST_Foils segment pair with the smallest
+//   absolute input-segment time difference.  Both choices are kept because the
+//   distance-minimized vertex is the current physics candidate, while the
+//   time-minimized TEST branch is a diagnostic for whether timing selects a
+//   different shared foil pair.
+//
+//   After a vertex is built, the comparer checks whether the vertex z position
+//   is geometrically closest to the same configured stopping-target foil index
+//   as the shared `sindex` used to seed the vertex.  The foil-index matched
+//   histograms and residuals are filled only when this geometry-nearest check
+//   succeeds.  Additional diagnostics record same-foil candidate properties,
+//   selected foil number, line parameters, opening angles, and reconstructed
+//   minus truth-origin residuals when a representative rank-0 downstream
+//   electron truth origin is available.
+//
 // Branch conventions:
 //   The default branch prefix is "trk", which uses:
 //
@@ -163,9 +206,18 @@ namespace
   //
   static const bool DO_FULL_PRINT = false;
 
+  // Focused printout for selected-track surface intersection momenta.  This is
+  // intentionally separate from DO_FULL_PRINT so momentum tables can be scanned
+  // without the full event diagnostic stream.
+  static const bool PRINT_SURFACE_MOM = true;
+
   // This prints the comparison between the selected reconstructed vertex and
   // the representative rank-0 downstream-electron MC truth origin.
-  static const bool DO_VERTEX_ORIGIN_RESIDUAL_PRINT = true;
+  static const bool DO_VERTEX_ORIGIN_RESIDUAL_PRINT = false;
+
+  // Print one compact timing-diagnostic row for every event that survives the
+  // final two-candidate-track selection.
+  static const bool PRINT_SURVIVING_EVENT_TIMING = true;
 
   // Histogram output is controlled here for the same reason as DO_FULL_PRINT:
   // the macro is still evolving, and editing one clearly named constant is less
@@ -284,6 +336,82 @@ namespace
     ostringstream out;
     out << "(" << vector.x() << ", " << vector.y() << ", " << vector.z() << ")";
     return out.str();
+  }
+
+  string formatFixed(double value, int precision = 3)
+  {
+    if (!std::isfinite(value))
+    {
+      return "nan";
+    }
+
+    ostringstream out;
+    out << fixed << setprecision(precision) << value;
+    return out.str();
+  }
+
+  string formatSignedFixed(double value, int precision = 3)
+  {
+    if (!std::isfinite(value))
+    {
+      return "nan";
+    }
+
+    ostringstream out;
+    out << showpos << fixed << setprecision(precision) << value;
+    return out.str();
+  }
+
+  string surfaceName(int sid)
+  {
+    switch (sid)
+    {
+      case mu2e::SurfaceIdDetail::TT_Front: return "TT_Front";
+      case mu2e::SurfaceIdDetail::TT_Mid: return "TT_Mid";
+      case mu2e::SurfaceIdDetail::TT_Back: return "TT_Back";
+      case mu2e::SurfaceIdDetail::TT_Inner: return "TT_Inner";
+      case mu2e::SurfaceIdDetail::TT_Outer: return "TT_Outer";
+      case mu2e::SurfaceIdDetail::DS_Front: return "DS_Front";
+      case mu2e::SurfaceIdDetail::DS_Back: return "DS_Back";
+      case mu2e::SurfaceIdDetail::DS_Inner: return "DS_Inner";
+      case mu2e::SurfaceIdDetail::DS_Outer: return "DS_Outer";
+      case mu2e::SurfaceIdDetail::IPA_Legacy: return "IPA_Legacy";
+      case mu2e::SurfaceIdDetail::IPA: return "IPA";
+      case mu2e::SurfaceIdDetail::IPA_Front: return "IPA_Front";
+      case mu2e::SurfaceIdDetail::IPA_Back: return "IPA_Back";
+      case mu2e::SurfaceIdDetail::OPA: return "OPA";
+      case mu2e::SurfaceIdDetail::TSDA: return "TSDA";
+      case mu2e::SurfaceIdDetail::ST_Front: return "ST_Front";
+      case mu2e::SurfaceIdDetail::ST_Back: return "ST_Back";
+      case mu2e::SurfaceIdDetail::ST_Inner: return "ST_Inner";
+      case mu2e::SurfaceIdDetail::ST_Outer: return "ST_Outer";
+      case mu2e::SurfaceIdDetail::ST_Foils: return "ST_Foils";
+      case mu2e::SurfaceIdDetail::ST_Wires: return "ST_Wires";
+      case mu2e::SurfaceIdDetail::TCRV: return "TCRV";
+      default:
+      {
+        ostringstream out;
+        out << "sid=" << sid;
+        return out.str();
+      }
+    }
+  }
+
+  string pzDirectionLabel(double pz)
+  {
+    if (!std::isfinite(pz))
+    {
+      return "invalid";
+    }
+    if (pz > 0.0)
+    {
+      return "forward";
+    }
+    if (pz < 0.0)
+    {
+      return "backward";
+    }
+    return "zero";
   }
 
   struct GeometryFoilMatch
@@ -953,6 +1081,364 @@ namespace
     return decision;
   }
 
+  int countStoppingTargetFoilIntersectionsForTrack(
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t trackIndex)
+  {
+    if (trackSegments == nullptr || trackIndex >= trackSegments->size())
+    {
+      return 0;
+    }
+
+    int nFoilIntersections = 0;
+    for (const auto& segment : trackSegments->at(trackIndex))
+    {
+      if (segment.sid == mu2e::SurfaceIdDetail::ST_Foils)
+      {
+        ++nFoilIntersections;
+      }
+    }
+    return nFoilIntersections;
+  }
+
+  bool hasOnlyForwardStoppingTargetFoilMomenta(
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t trackIndex)
+  {
+    if (trackSegments == nullptr || trackIndex >= trackSegments->size())
+    {
+      return false;
+    }
+
+    bool sawStoppingTargetFoil = false;
+    for (const auto& segment : trackSegments->at(trackIndex))
+    {
+      if (segment.sid != mu2e::SurfaceIdDetail::ST_Foils)
+      {
+        continue;
+      }
+
+      sawStoppingTargetFoil = true;
+      if (!(std::isfinite(segment.mom.z()) && segment.mom.z() > 0.0))
+      {
+        return false;
+      }
+    }
+
+    return sawStoppingTargetFoil;
+  }
+
+  bool hasAnyBackwardStoppingTargetFoilMomentum(
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t trackIndex)
+  {
+    if (trackSegments == nullptr || trackIndex >= trackSegments->size())
+    {
+      return false;
+    }
+
+    for (const auto& segment : trackSegments->at(trackIndex))
+    {
+      if (segment.sid == mu2e::SurfaceIdDetail::ST_Foils &&
+          std::isfinite(segment.mom.z()) &&
+          segment.mom.z() < 0.0)
+      {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  struct FirstStoppingTargetFoilTime
+  {
+    bool valid = false;
+    double time = numeric_limits<double>::quiet_NaN();
+    size_t storedSegmentIndex = 0;
+    int foilIndex = -1;
+  };
+
+  FirstStoppingTargetFoilTime earliestStoppingTargetFoilTimeForTrack(
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    size_t trackIndex)
+  {
+    FirstStoppingTargetFoilTime result;
+    if (trackSegments == nullptr || trackIndex >= trackSegments->size())
+    {
+      return result;
+    }
+
+    const auto& segments = trackSegments->at(trackIndex);
+    for (size_t iSegment = 0; iSegment < segments.size(); ++iSegment)
+    {
+      const auto& segment = segments.at(iSegment);
+      if (segment.sid != mu2e::SurfaceIdDetail::ST_Foils ||
+          !std::isfinite(segment.time))
+      {
+        continue;
+      }
+
+      if (!result.valid || segment.time < result.time)
+      {
+        result.valid = true;
+        result.time = segment.time;
+        result.storedSegmentIndex = iSegment;
+        result.foilIndex = segment.sindex;
+      }
+    }
+
+    return result;
+  }
+
+  void printSelectedEventTimingDiagnostics(
+    const mu2e::EventInfo* evtinfo,
+    Long64_t entry,
+    const mu2e::SimInfo* truthOrigin,
+    size_t firstTrackIndex,
+    size_t secondTrackIndex,
+    const FirstStoppingTargetFoilTime& firstTrackFirstSTFoilTime,
+    const FirstStoppingTargetFoilTime& secondTrackFirstSTFoilTime)
+  {
+    cout << "TIMING_RESOLUTION surviving event "
+         << formatEventLabel(evtinfo, entry) << endl;
+
+    cout << "  MC truth origin time: ";
+    if (truthOrigin != nullptr && std::isfinite(truthOrigin->time))
+    {
+      cout << formatFixed(truthOrigin->time) << " ns";
+    }
+    else
+    {
+      cout << "unavailable";
+    }
+    cout << endl;
+
+    cout << "  track " << firstTrackIndex << " earliest ST_Foils time: ";
+    if (firstTrackFirstSTFoilTime.valid)
+    {
+      cout << formatFixed(firstTrackFirstSTFoilTime.time) << " ns"
+           << " (foil sindex " << firstTrackFirstSTFoilTime.foilIndex
+           << ", stored trkseg " << firstTrackFirstSTFoilTime.storedSegmentIndex
+           << ")";
+    }
+    else
+    {
+      cout << "unavailable";
+    }
+    cout << endl;
+
+    cout << "  track " << secondTrackIndex << " earliest ST_Foils time: ";
+    if (secondTrackFirstSTFoilTime.valid)
+    {
+      cout << formatFixed(secondTrackFirstSTFoilTime.time) << " ns"
+           << " (foil sindex " << secondTrackFirstSTFoilTime.foilIndex
+           << ", stored trkseg " << secondTrackFirstSTFoilTime.storedSegmentIndex
+           << ")";
+    }
+    else
+    {
+      cout << "unavailable";
+    }
+    cout << endl;
+
+    if (!firstTrackFirstSTFoilTime.valid ||
+        !secondTrackFirstSTFoilTime.valid)
+    {
+      cout << "  earliest ST_Foils time comparison: unavailable" << endl;
+      return;
+    }
+
+    const bool firstTrackIsEarlier =
+      firstTrackFirstSTFoilTime.time <= secondTrackFirstSTFoilTime.time;
+    const size_t earlierTrackIndex =
+      firstTrackIsEarlier ? firstTrackIndex : secondTrackIndex;
+    const size_t laterTrackIndex =
+      firstTrackIsEarlier ? secondTrackIndex : firstTrackIndex;
+    const double earlierFirstSTFoilTime =
+      firstTrackIsEarlier
+        ? firstTrackFirstSTFoilTime.time
+        : secondTrackFirstSTFoilTime.time;
+    const double laterFirstSTFoilTime =
+      firstTrackIsEarlier
+        ? secondTrackFirstSTFoilTime.time
+        : firstTrackFirstSTFoilTime.time;
+    const double firstSTFoilDeltaT =
+      laterFirstSTFoilTime - earlierFirstSTFoilTime;
+
+    cout << "  earliest ST_Foils time difference"
+         << " (later - earlier): "
+         << formatFixed(firstSTFoilDeltaT) << " ns"
+         << " (earlier track " << earlierTrackIndex
+         << ", later track " << laterTrackIndex << ")"
+         << endl;
+
+    cout << "  MC truth - earlier-track first ST_Foils time: ";
+    if (truthOrigin != nullptr && std::isfinite(truthOrigin->time))
+    {
+      cout << formatFixed(truthOrigin->time - earlierFirstSTFoilTime)
+           << " ns";
+    }
+    else
+    {
+      cout << "unavailable";
+    }
+    cout << endl;
+
+    cout << "  MC truth - later-track first ST_Foils time: ";
+    if (truthOrigin != nullptr && std::isfinite(truthOrigin->time))
+    {
+      cout << formatFixed(truthOrigin->time - laterFirstSTFoilTime)
+           << " ns";
+    }
+    else
+    {
+      cout << "unavailable";
+    }
+    cout << endl;
+  }
+
+  void printSurfaceMomentaForSelectedTrack(
+    const vector<mu2e::TrkInfo>* tracks,
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    const RecoTrackDecision& decision,
+    size_t selectedOrdinal)
+  {
+    const size_t trackIndex = decision.trackIndex;
+    cout << "  selected track " << selectedOrdinal
+         << " (reco index " << trackIndex << ")";
+    if (tracks != nullptr && trackIndex < tracks->size())
+    {
+      cout << " pdg=" << tracks->at(trackIndex).pdg
+           << " nhits=" << tracks->at(trackIndex).nhits
+           << " fitcon=" << tracks->at(trackIndex).fitcon;
+    }
+    cout << endl;
+    cout << "    selection momentum: ";
+    if (decision.momentum.valid)
+    {
+      cout << formatFixed(decision.momentum.momentum)
+           << " MeV/c from " << decision.momentum.source;
+    }
+    else
+    {
+      cout << "unavailable";
+    }
+    cout << endl;
+
+    const int nSTFoilIntersections =
+      countStoppingTargetFoilIntersectionsForTrack(trackSegments, trackIndex);
+    const bool solelyForwardSTFoils =
+      hasOnlyForwardStoppingTargetFoilMomenta(trackSegments, trackIndex);
+    cout << "    ST_Foils intersections: " << nSTFoilIntersections
+         << ", all ST_Foils p_z > 0: "
+         << (solelyForwardSTFoils ? "yes" : "no") << endl;
+
+    if (trackSegments == nullptr || trackIndex >= trackSegments->size())
+    {
+      cout << "    surface intersections unavailable for this track" << endl;
+      return;
+    }
+
+    const auto& segments = trackSegments->at(trackIndex);
+    vector<size_t> orderedIndices;
+    orderedIndices.reserve(segments.size());
+    for (size_t iSegment = 0; iSegment < segments.size(); ++iSegment)
+    {
+      orderedIndices.push_back(iSegment);
+    }
+    stable_sort(orderedIndices.begin(),
+                orderedIndices.end(),
+                [&segments](size_t leftIndex, size_t rightIndex) {
+                  return segments.at(leftIndex).time <
+                         segments.at(rightIndex).time;
+                });
+
+    cout << "    time-ordered surface intersection momenta" << endl;
+    cout << "      * marks ST_Foils rows" << endl;
+    cout << "      "
+         << right << setw(4) << "row"
+         << " " << setw(1) << "*"
+         << " " << setw(12) << "time[ns]"
+         << " " << left << setw(12) << "surface"
+         << right << setw(7) << "sidx"
+         << setw(9) << "inbound"
+         << setw(7) << "gap"
+         << setw(15) << "p_x"
+         << setw(15) << "p_y"
+         << setw(16) << "p_z"
+         << setw(15) << "|p|"
+         << setw(11) << "p_z sign"
+         << endl;
+    cout << "      "
+         << string(4, '-')
+         << " " << "-"
+         << " " << string(12, '-')
+         << " " << string(12, '-')
+         << string(7, '-')
+         << string(9, '-')
+         << string(7, '-')
+         << string(15, '-')
+         << string(15, '-')
+         << string(16, '-')
+         << string(15, '-')
+         << string(11, '-')
+         << endl;
+
+    for (size_t orderedRow = 0; orderedRow < orderedIndices.size(); ++orderedRow)
+    {
+      const mu2e::TrkSegInfo& segment =
+        segments.at(orderedIndices.at(orderedRow));
+      const bool isStoppingTargetFoil =
+        segment.sid == mu2e::SurfaceIdDetail::ST_Foils;
+      cout << "      "
+           << right << setw(4) << orderedRow
+           << " " << setw(1) << (isStoppingTargetFoil ? "*" : "")
+           << " " << setw(12) << formatFixed(segment.time)
+           << " " << left << setw(12) << surfaceName(segment.sid)
+           << right << setw(7) << segment.sindex
+           << setw(9) << (segment.inbounds ? "yes" : "no")
+           << setw(7) << (segment.gap ? "yes" : "no")
+           << setw(15) << formatSignedFixed(segment.mom.x())
+           << setw(15) << formatSignedFixed(segment.mom.y())
+           << setw(16) << formatSignedFixed(segment.mom.z())
+           << setw(15) << formatFixed(segment.mom.R())
+           << setw(11) << pzDirectionLabel(segment.mom.z())
+           << endl;
+    }
+  }
+
+  void printSelectedSurfaceMomenta(
+    const mu2e::EventInfo* evtinfo,
+    Long64_t entry,
+    const vector<mu2e::TrkInfo>* tracks,
+    const vector<vector<mu2e::TrkSegInfo>>* trackSegments,
+    const vector<RecoTrackDecision>& selectedTrackDecisions,
+    double momentumCutMin,
+    double momentumCutMax)
+  {
+    cout << "===============================================================================" << endl;
+    cout << "PRINT_SURFACE_MOM selected event: "
+         << formatEventLabel(evtinfo, entry) << endl;
+    cout << "  selection: exactly two downstream e^{-} tracks, good calo hits,"
+         << " reco momentum in [" << momentumCutMin << ", "
+         << momentumCutMax << "] MeV/c" << endl;
+    cout << "-------------------------------------------------------------------------------" << endl;
+
+    for (size_t iSelectedTrack = 0;
+         iSelectedTrack < selectedTrackDecisions.size();
+         ++iSelectedTrack)
+    {
+      printSurfaceMomentaForSelectedTrack(tracks,
+                                          trackSegments,
+                                          selectedTrackDecisions.at(iSelectedTrack),
+                                          iSelectedTrack + 1);
+      if (iSelectedTrack + 1 < selectedTrackDecisions.size())
+      {
+        cout << "-------------------------------------------------------------------------------" << endl;
+      }
+    }
+  }
+
   void printTruthForTrack(const vector<vector<mu2e::SimInfo>>* truthSimByTrack,
                           size_t trackIndex,
                           int maxTruthPerTrack)
@@ -1315,6 +1801,12 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
   Long64_t histogramSelectedSpaceVertexFoilIndexMatches = 0;
   Long64_t histogramSelectedTimeVertexFoilIndexChecks = 0;
   Long64_t histogramSelectedTimeVertexFoilIndexMatches = 0;
+  Long64_t histogramSelectedSolelyForwardSTFoilTracks = 0;
+  Long64_t histogramSelectedEventsWithAnyBackwardSTFoilTrack = 0;
+  Long64_t histogramSelectedEventsWithOneBackwardSTFoilTrackAndOneOnlyForwardSTFoilTrack = 0;
+  Long64_t timingDiagnosticsFilledEvents = 0;
+  Long64_t timingDiagnosticsMissingTruthEvents = 0;
+  Long64_t timingDiagnosticsMissingFirstSTFoilTimeEvents = 0;
 
   for (Long64_t entry = 0; entry < entriesToRead; ++entry)
   {
@@ -1576,6 +2068,57 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
       selectedTrackIndices.push_back(candidateTrackDecisions.at(0).trackIndex);
       selectedTrackIndices.push_back(candidateTrackDecisions.at(1).trackIndex);
 
+      const bool firstTrackHasBackwardSTFoilMomentum =
+        hasAnyBackwardStoppingTargetFoilMomentum(
+          trackSegments,
+          candidateTrackDecisions.at(0).trackIndex);
+      const bool secondTrackHasBackwardSTFoilMomentum =
+        hasAnyBackwardStoppingTargetFoilMomentum(
+          trackSegments,
+          candidateTrackDecisions.at(1).trackIndex);
+      const bool firstTrackHasOnlyForwardSTFoilMomenta =
+        hasOnlyForwardStoppingTargetFoilMomenta(
+          trackSegments,
+          candidateTrackDecisions.at(0).trackIndex);
+      const bool secondTrackHasOnlyForwardSTFoilMomenta =
+        hasOnlyForwardStoppingTargetFoilMomenta(
+          trackSegments,
+          candidateTrackDecisions.at(1).trackIndex);
+
+      if (firstTrackHasBackwardSTFoilMomentum ||
+          secondTrackHasBackwardSTFoilMomentum)
+      {
+        ++histogramSelectedEventsWithAnyBackwardSTFoilTrack;
+      }
+
+      if ((firstTrackHasBackwardSTFoilMomentum &&
+           secondTrackHasOnlyForwardSTFoilMomenta) ||
+          (secondTrackHasBackwardSTFoilMomentum &&
+           firstTrackHasOnlyForwardSTFoilMomenta))
+      {
+        ++histogramSelectedEventsWithOneBackwardSTFoilTrackAndOneOnlyForwardSTFoilTrack;
+      }
+
+      if (firstTrackHasOnlyForwardSTFoilMomenta)
+      {
+        ++histogramSelectedSolelyForwardSTFoilTracks;
+      }
+      if (secondTrackHasOnlyForwardSTFoilMomenta)
+      {
+        ++histogramSelectedSolelyForwardSTFoilTracks;
+      }
+
+      if (PRINT_SURFACE_MOM)
+      {
+        printSelectedSurfaceMomenta(evtinfo,
+                                    entry,
+                                    tracks,
+                                    trackSegments,
+                                    candidateTrackDecisions,
+                                    momentumCutMin,
+                                    momentumCutMax);
+      }
+
       twoelectronhist::fillRecoSelectedTrackFoilIntersectionZByFoil(
         histograms,
         trackSegments,
@@ -1583,6 +2126,49 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
 
       const mu2e::SimInfo* truthOrigin =
         findRepresentativeTruthOrigin(truthSimByTrack, selectedTrackIndices, 11);
+
+      const FirstStoppingTargetFoilTime firstTrackFirstSTFoilTime =
+        earliestStoppingTargetFoilTimeForTrack(
+          trackSegments,
+          candidateTrackDecisions.at(0).trackIndex);
+      const FirstStoppingTargetFoilTime secondTrackFirstSTFoilTime =
+        earliestStoppingTargetFoilTimeForTrack(
+          trackSegments,
+          candidateTrackDecisions.at(1).trackIndex);
+
+      if (PRINT_SURVIVING_EVENT_TIMING)
+      {
+        printSelectedEventTimingDiagnostics(
+          evtinfo,
+          entry,
+          truthOrigin,
+          candidateTrackDecisions.at(0).trackIndex,
+          candidateTrackDecisions.at(1).trackIndex,
+          firstTrackFirstSTFoilTime,
+          secondTrackFirstSTFoilTime);
+      }
+
+      if (truthOrigin == nullptr || !std::isfinite(truthOrigin->time))
+      {
+        ++timingDiagnosticsMissingTruthEvents;
+      }
+      if (!firstTrackFirstSTFoilTime.valid ||
+          !secondTrackFirstSTFoilTime.valid)
+      {
+        ++timingDiagnosticsMissingFirstSTFoilTimeEvents;
+      }
+      if (truthOrigin != nullptr &&
+          std::isfinite(truthOrigin->time) &&
+          firstTrackFirstSTFoilTime.valid &&
+          secondTrackFirstSTFoilTime.valid)
+      {
+        twoelectronhist::fillSelectedEventTimingDiagnostics(
+          histograms,
+          truthOrigin->time,
+          firstTrackFirstSTFoilTime.time,
+          secondTrackFirstSTFoilTime.time);
+        ++timingDiagnosticsFilledEvents;
+      }
 
       if (truthOrigin != nullptr && vertexWasAttempted)
       {
@@ -1828,6 +2414,20 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << eventsWithExactlyTwoCandidateTracks << endl;
   cout << "  events with at least two final-candidate tracks: "
        << eventsWithAtLeastTwoCandidateTracks << endl;
+  cout << "  selected tracks with p_z > 0 at every intersected ST_Foils surface: "
+       << histogramSelectedSolelyForwardSTFoilTracks << endl;
+  cout << "  surviving final-candidate events with ST_Foils p_z categories: "
+       << "any track has p_z < 0 = "
+       << histogramSelectedEventsWithAnyBackwardSTFoilTrack
+       << ", exactly one track has p_z < 0 and the other only has p_z > 0 = "
+       << histogramSelectedEventsWithOneBackwardSTFoilTrackAndOneOnlyForwardSTFoilTrack
+       << endl;
+  cout << "  surviving final-candidate events with filled timing-resolution diagnostics: "
+       << timingDiagnosticsFilledEvents << endl;
+  cout << "  surviving final-candidate events missing timing truth origin: "
+       << timingDiagnosticsMissingTruthEvents << endl;
+  cout << "  surviving final-candidate events missing at least one earliest ST_Foils time: "
+       << timingDiagnosticsMissingFirstSTFoilTimeEvents << endl;
   cout << "  histogram-selected space vertices with opposite-pz selected shared ST_Foils pair: "
        << histogramSelectedSpaceSharedFoilOppositePzPairs << endl;
   cout << "  histogram-selected tracks in opposite-pz space selected shared ST_Foils pairs: "
@@ -1869,6 +2469,14 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.mcTruthEntries << endl;
   cout << "  histogram reconstructed momentum entries: "
        << histograms.recoMomentumEntries << endl;
+  cout << "  histogram timing truth-origin entries: "
+       << histograms.timingSelectedEventTruthOriginTimeEntries << endl;
+  cout << "  histogram timing selected-track first ST_Foils time entries: "
+       << histograms.timingSelectedTrackFirstSTFoilTimeEntries << endl;
+  cout << "  histogram timing selected-track first ST_Foils delta-t entries: "
+       << histograms.timingSelectedTrackFirstSTFoilDeltaTEntries << endl;
+  cout << "  histogram timing truth-minus-first-ST-Foils entries: "
+       << histograms.timingTruthMinusFirstSTFoilEntries << endl;
   cout << "  histogram raw reco selected-track ST_Foils intersection-z entries: "
        << histograms.recoSelectedTrackFoilIntersectionZEntries << endl;
   cout << "  histogram raw reco selected-track count-by-foil entries: "

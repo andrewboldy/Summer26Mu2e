@@ -267,6 +267,46 @@ namespace twoelectronplots
     histogram->Draw("HIST");
   }
 
+  inline void drawTimingTruthAndFirstSTFoilOverlay(TH1* truthTimeHistogram,
+                                                   TH1* firstSTFoilTimeHistogram)
+  {
+    if (truthTimeHistogram == nullptr || firstSTFoilTimeHistogram == nullptr)
+    {
+      return;
+    }
+
+    if (gPad != nullptr)
+    {
+      gPad->SetGridx();
+      gPad->SetGridy();
+    }
+
+    truthTimeHistogram->SetLineColor(kBlue + 1);
+    truthTimeHistogram->SetLineWidth(2);
+    truthTimeHistogram->SetStats(false);
+    firstSTFoilTimeHistogram->SetLineColor(kRed + 1);
+    firstSTFoilTimeHistogram->SetLineWidth(2);
+    firstSTFoilTimeHistogram->SetStats(false);
+
+    const double maximum =
+      std::max(truthTimeHistogram->GetMaximum(),
+               firstSTFoilTimeHistogram->GetMaximum());
+    if (maximum > 0.0)
+    {
+      truthTimeHistogram->SetMaximum(1.15 * maximum);
+    }
+
+    truthTimeHistogram->Draw("HIST E");
+    firstSTFoilTimeHistogram->Draw("HIST E SAME");
+
+    TLegend legend(0.50, 0.72, 0.88, 0.88);
+    legend.SetBorderSize(0);
+    legend.SetFillStyle(0);
+    legend.AddEntry(truthTimeHistogram, "MC truth origin time", "l");
+    legend.AddEntry(firstSTFoilTimeHistogram, "track first ST_Foils time", "l");
+    legend.DrawClone();
+  }
+
   inline void drawFoilHistogramCollectionHistogram(
     TH1* histogram,
     int foilIndex,
@@ -963,12 +1003,18 @@ namespace twoelectronplots
       outputDirectory + "/Angles";
     const std::string deltaZVsFoilDirectory =
       outputDirectory + "/DeltaZVsFoil";
+    const std::string timingPlotsDirectory =
+      outputDirectory + "/timingPlots";
+    const std::string timingResolutionDirectory =
+      timingPlotsDirectory + "/timingResolution";
     ensureDirectoryPath(monteCarloTruthDirectory);
     ensureDirectoryPath(rawRecoDirectory);
     ensureDirectoryPath(rawRecoFoilPlotsDirectory);
     ensureDirectoryPath(rawRecoFoilMomentumPlotsDirectory);
     ensureDirectoryPath(anglesDirectory);
     ensureDirectoryPath(deltaZVsFoilDirectory);
+    ensureDirectoryPath(timingPlotsDirectory);
+    ensureDirectoryPath(timingResolutionDirectory);
 
     TH1F* hMCTruthOriginT = get1DHistogram(*histogramFile,
                                            "hMCTruthRank0DownstreamElectronOriginT");
@@ -989,6 +1035,27 @@ namespace twoelectronplots
 
     TH1F* hRecoMomentum = get1DHistogram(*histogramFile,
                                          "hRecoSelectedDownstreamElectronMomentum");
+    TH1F* hTimingSelectedEventTruthOriginTime =
+      get1DHistogram(*histogramFile,
+                     "hTimingSelectedEventTruthOriginTime");
+    TH1F* hTimingSelectedTrackFirstSTFoilTime =
+      get1DHistogram(*histogramFile,
+                     "hTimingSelectedTrackFirstSTFoilTime");
+    TH1F* hTimingSelectedTrackFirstSTFoilDeltaT =
+      get1DHistogram(*histogramFile,
+                     "hTimingSelectedTrackFirstSTFoilDeltaT");
+    TH1F* hTimingTruthMinusEarlierFirstSTFoilTime =
+      get1DHistogram(*histogramFile,
+                     "hTimingTruthMinusEarlierFirstSTFoilTime");
+    TH1F* hTimingTruthMinusLaterFirstSTFoilTime =
+      get1DHistogram(*histogramFile,
+                     "hTimingTruthMinusLaterFirstSTFoilTime");
+    TH1F* hTimingTruthMinusAverageFirstSTFoilTime =
+      get1DHistogram(*histogramFile,
+                     "hTimingTruthMinusAverageFirstSTFoilTime");
+    TH2F* hTimingTruthMinusEarlierVsLaterFirstSTFoilTime =
+      get2DHistogram(*histogramFile,
+                     "hTimingTruthMinusEarlierVsLaterFirstSTFoilTime");
 
     TH1F* hRecoVertexX = get1DHistogram(*histogramFile, "hRecoTwoElectronVertexX");
     TH1F* hRecoVertexY = get1DHistogram(*histogramFile, "hRecoTwoElectronVertexY");
@@ -1231,6 +1298,13 @@ namespace twoelectronplots
         hMCTruthOriginXY == nullptr || hMCTruthOriginXZ == nullptr ||
         hMCTruthOriginYZ == nullptr || hMCTruthMomentum == nullptr ||
         hRecoMomentum == nullptr || hRecoVertexX == nullptr ||
+        hTimingSelectedEventTruthOriginTime == nullptr ||
+        hTimingSelectedTrackFirstSTFoilTime == nullptr ||
+        hTimingSelectedTrackFirstSTFoilDeltaT == nullptr ||
+        hTimingTruthMinusEarlierFirstSTFoilTime == nullptr ||
+        hTimingTruthMinusLaterFirstSTFoilTime == nullptr ||
+        hTimingTruthMinusAverageFirstSTFoilTime == nullptr ||
+        hTimingTruthMinusEarlierVsLaterFirstSTFoilTime == nullptr ||
         hRecoVertexY == nullptr || hRecoVertexZ == nullptr ||
         hRecoVertexXY == nullptr || hRecoVertexXZ == nullptr ||
         hRecoVertexYZ == nullptr ||
@@ -1304,6 +1378,12 @@ namespace twoelectronplots
     style1DHistogram(hMCTruthOriginZ);
     style1DHistogram(hMCTruthMomentum);
     style1DHistogram(hRecoMomentum);
+    style1DHistogram(hTimingSelectedEventTruthOriginTime);
+    style1DHistogram(hTimingSelectedTrackFirstSTFoilTime);
+    style1DHistogram(hTimingSelectedTrackFirstSTFoilDeltaT);
+    style1DHistogram(hTimingTruthMinusEarlierFirstSTFoilTime);
+    style1DHistogram(hTimingTruthMinusLaterFirstSTFoilTime);
+    style1DHistogram(hTimingTruthMinusAverageFirstSTFoilTime);
     style1DHistogram(hRecoVertexX);
     style1DHistogram(hRecoVertexY);
     style1DHistogram(hRecoVertexZ);
@@ -1389,6 +1469,54 @@ namespace twoelectronplots
                           700);
     hRecoMomentum->Draw("HIST E");
     cRecoMomentum.SaveAs((rawRecoDirectory + "/RecoMomentum.pdf").c_str());
+
+    TCanvas cTimingTruthAndFirstSTFoilOverlay(
+      "cTimingTruthAndFirstSTFoilOverlay",
+      "Selected event truth time and track first ST_Foils time",
+      1000,
+      700);
+    drawTimingTruthAndFirstSTFoilOverlay(
+      hTimingSelectedEventTruthOriginTime,
+      hTimingSelectedTrackFirstSTFoilTime);
+    cTimingTruthAndFirstSTFoilOverlay.SaveAs(
+      (timingResolutionDirectory +
+       "/TruthOriginTimeVsFirstSTFoilTime.pdf").c_str());
+
+    TCanvas cTimingFirstSTFoilDeltaT(
+      "cTimingFirstSTFoilDeltaT",
+      "Selected event first ST_Foils time separation",
+      1000,
+      700);
+    hTimingSelectedTrackFirstSTFoilDeltaT->SetLineColor(kViolet + 1);
+    hTimingSelectedTrackFirstSTFoilDeltaT->SetStats(false);
+    hTimingSelectedTrackFirstSTFoilDeltaT->Draw("HIST E");
+    cTimingFirstSTFoilDeltaT.SaveAs(
+      (timingResolutionDirectory +
+       "/FirstSTFoilTimeDifference.pdf").c_str());
+
+    TCanvas cTimingTruthMinusFirstSTFoil(
+      "cTimingTruthMinusFirstSTFoil",
+      "Selected event truth minus first ST_Foils timing residuals",
+      1600,
+      1200);
+    cTimingTruthMinusFirstSTFoil.Divide(2, 2);
+    cTimingTruthMinusFirstSTFoil.cd(1);
+    hTimingTruthMinusEarlierFirstSTFoilTime->SetLineColor(kBlue + 1);
+    hTimingTruthMinusEarlierFirstSTFoilTime->SetStats(false);
+    hTimingTruthMinusEarlierFirstSTFoilTime->Draw("HIST E");
+    cTimingTruthMinusFirstSTFoil.cd(2);
+    hTimingTruthMinusLaterFirstSTFoilTime->SetLineColor(kRed + 1);
+    hTimingTruthMinusLaterFirstSTFoilTime->SetStats(false);
+    hTimingTruthMinusLaterFirstSTFoilTime->Draw("HIST E");
+    cTimingTruthMinusFirstSTFoil.cd(3);
+    hTimingTruthMinusAverageFirstSTFoilTime->SetLineColor(kGreen + 2);
+    hTimingTruthMinusAverageFirstSTFoilTime->SetStats(false);
+    hTimingTruthMinusAverageFirstSTFoilTime->Draw("HIST E");
+    cTimingTruthMinusFirstSTFoil.cd(4);
+    draw2DHistogram(hTimingTruthMinusEarlierVsLaterFirstSTFoilTime);
+    cTimingTruthMinusFirstSTFoil.SaveAs(
+      (timingResolutionDirectory +
+       "/TruthMinusFirstSTFoilTimingResolution.pdf").c_str());
 
     TCanvas cRecoSelectedDownstreamElectronTrackCountByFoil(
       "cRecoSelectedDownstreamElectronTrackCountByFoil",
@@ -1592,7 +1720,7 @@ namespace twoelectronplots
                                   700);
     hRecoVertexSelectedSegmentDeltaTTest->Draw("HIST E");
     cRecoVertexDeltaTTest.SaveAs(
-      (rawRecoDirectory + "/RecoVertexSelectedSegmentDeltaT_TEST.pdf").c_str());
+      (timingPlotsDirectory + "/RecoVertexSelectedSegmentDeltaT_TEST.pdf").c_str());
 
     TCanvas cRecoVertexMinTimeDifferenceTest("cRecoVertexMinTimeDifferenceTest",
                                              "Minimum-|#Delta t| shared ST_Foils pair time difference",
@@ -1600,7 +1728,7 @@ namespace twoelectronplots
                                              700);
     hRecoVertexMinTimeDifferenceTest->Draw("HIST E");
     cRecoVertexMinTimeDifferenceTest.SaveAs(
-      (rawRecoDirectory + "/RecoVertexMinTimeDifference_TEST.pdf").c_str());
+      (timingPlotsDirectory + "/RecoVertexMinTimeDifference_TEST.pdf").c_str());
 
     TCanvas cRecoSharedFoilMaxLvsDeltaZ(
       "cRecoSharedFoilMaxLvsDeltaZ",
@@ -1703,7 +1831,7 @@ namespace twoelectronplots
     cTestRecoVertexMinTime.cd(3); hTestRecoVertexMinTimeZ->Draw("HIST E");
     cTestRecoVertexMinTime.cd(4); hTestRecoVertexMinTimeDistance->Draw("HIST E");
     cTestRecoVertexMinTime.SaveAs(
-      (rawRecoDirectory + "/RecoVertexMinTimeChoice_1D_TEST.pdf").c_str());
+      (timingPlotsDirectory + "/RecoVertexMinTimeChoice_1D_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTimeResidual("cTestRecoVertexMinTimeResidual",
                                            "TEST: minimum-|#Delta t| reconstructed minus truth vertex residual",
@@ -1719,7 +1847,7 @@ namespace twoelectronplots
     cTestRecoVertexMinTimeResidual.cd(4);
     hTestRecoVertexMinTimeTruthDistance->Draw("HIST E");
     cTestRecoVertexMinTimeResidual.SaveAs(
-      (rawRecoDirectory + "/RecoVertexMinTimeChoiceTruthResidualXYZ_TEST.pdf").c_str());
+      (timingPlotsDirectory + "/RecoVertexMinTimeChoiceTruthResidualXYZ_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTimeMaps("cTestRecoVertexMinTimeMaps",
                                        "TEST: minimum-|#Delta t| reconstructed two-electron vertex maps",
@@ -1733,7 +1861,7 @@ namespace twoelectronplots
     cTestRecoVertexMinTimeMaps.cd(3);
     draw2DHistogram(hTestRecoVertexMinTimeYZ); drawStoppingTargetBoxYZ();
     cTestRecoVertexMinTimeMaps.SaveAs(
-      (rawRecoDirectory + "/RecoVertexMinTimeChoice_2DMaps_TEST.pdf").c_str());
+      (timingPlotsDirectory + "/RecoVertexMinTimeChoice_2DMaps_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTimeFoilIndexMatchedMaps(
       "cTestRecoVertexMinTimeFoilIndexMatchedMaps",
@@ -1751,7 +1879,7 @@ namespace twoelectronplots
     draw2DHistogram(hTestRecoVertexMinTimeFoilIndexMatchedYZ);
     drawStoppingTargetBoxYZ();
     cTestRecoVertexMinTimeFoilIndexMatchedMaps.SaveAs(
-      (deltaZVsFoilDirectory + "/RecoVertexMinTimeFoilIndexMatched_2DMaps_TEST.pdf").c_str());
+      (timingPlotsDirectory + "/RecoVertexMinTimeFoilIndexMatched_2DMaps_TEST.pdf").c_str());
 
     TCanvas cTestRecoVertexMinTimeFoilIndexMatchedResidual(
       "cTestRecoVertexMinTimeFoilIndexMatchedResidual",
@@ -1768,7 +1896,7 @@ namespace twoelectronplots
     cTestRecoVertexMinTimeFoilIndexMatchedResidual.cd(4);
     hTestRecoVertexMinTimeFoilIndexMatchedTruthDistance->Draw("HIST E");
     cTestRecoVertexMinTimeFoilIndexMatchedResidual.SaveAs(
-      (deltaZVsFoilDirectory + "/RecoVertexMinTimeFoilIndexMatchedTruthResidualXYZ_TEST.pdf").c_str());
+      (timingPlotsDirectory + "/RecoVertexMinTimeFoilIndexMatchedTruthResidualXYZ_TEST.pdf").c_str());
 
     histogramFile->Close();
     delete histogramFile;

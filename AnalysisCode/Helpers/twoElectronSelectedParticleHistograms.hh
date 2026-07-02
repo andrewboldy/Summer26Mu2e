@@ -91,6 +91,12 @@ namespace twoelectronhist
     int timeBins = 200;
     double timeMin = 0.0;
     double timeMax = 2000.0;
+    int firstSTFoilTimeDifferenceBins = 400;
+    double firstSTFoilTimeDifferenceMin = 0.0;
+    double firstSTFoilTimeDifferenceMax = 2000.0;
+    int timingResolutionBins = 400;
+    double timingResolutionMin = -2000.0;
+    double timingResolutionMax = 2000.0;
 
     int transverseBins = 200;
     double transverseMin = -200.0;
@@ -142,6 +148,13 @@ namespace twoelectronhist
     TH1F* mcTruthMomentum = nullptr;
 
     TH1F* recoMomentum = nullptr;
+    TH1F* timingSelectedEventTruthOriginTime = nullptr;
+    TH1F* timingSelectedTrackFirstSTFoilTime = nullptr;
+    TH1F* timingSelectedTrackFirstSTFoilDeltaT = nullptr;
+    TH1F* timingTruthMinusEarlierFirstSTFoilTime = nullptr;
+    TH1F* timingTruthMinusLaterFirstSTFoilTime = nullptr;
+    TH1F* timingTruthMinusAverageFirstSTFoilTime = nullptr;
+    TH2F* timingTruthMinusEarlierVsLaterFirstSTFoilTime = nullptr;
 
     TH1F* recoVertexX = nullptr;
     TH1F* recoVertexY = nullptr;
@@ -214,6 +227,10 @@ namespace twoelectronhist
     Long64_t selectedEvents = 0;
     Long64_t mcTruthEntries = 0;
     Long64_t recoMomentumEntries = 0;
+    Long64_t timingSelectedEventTruthOriginTimeEntries = 0;
+    Long64_t timingSelectedTrackFirstSTFoilTimeEntries = 0;
+    Long64_t timingSelectedTrackFirstSTFoilDeltaTEntries = 0;
+    Long64_t timingTruthMinusFirstSTFoilEntries = 0;
     Long64_t recoVertexEntries = 0;
     Long64_t recoVertexMomentumThetaEntries = 0;
     Long64_t recoVertexMomentumOpeningAngleEntries = 0;
@@ -359,6 +376,51 @@ namespace twoelectronhist
              config.momentumBins,
              config.momentumMin,
              config.momentumMax);
+    book.timingSelectedEventTruthOriginTime =
+      make1D("hTimingSelectedEventTruthOriginTime",
+             "Selected event MC truth origin time;t_{truth} [ns];events",
+             config.timeBins,
+             config.timeMin,
+             config.timeMax);
+    book.timingSelectedTrackFirstSTFoilTime =
+      make1D("hTimingSelectedTrackFirstSTFoilTime",
+             "Selected track earliest ST_Foils intersection time;t_{first ST} [ns];tracks",
+             config.timeBins,
+             config.timeMin,
+             config.timeMax);
+    book.timingSelectedTrackFirstSTFoilDeltaT =
+      make1D("hTimingSelectedTrackFirstSTFoilDeltaT",
+             "Selected event earliest ST_Foils time separation;t_{later first ST} - t_{earlier first ST} [ns];events",
+             config.firstSTFoilTimeDifferenceBins,
+             config.firstSTFoilTimeDifferenceMin,
+             config.firstSTFoilTimeDifferenceMax);
+    book.timingTruthMinusEarlierFirstSTFoilTime =
+      make1D("hTimingTruthMinusEarlierFirstSTFoilTime",
+             "Selected event timing residual for earlier first ST_Foils track;t_{truth} - t_{earlier first ST} [ns];events",
+             config.timingResolutionBins,
+             config.timingResolutionMin,
+             config.timingResolutionMax);
+    book.timingTruthMinusLaterFirstSTFoilTime =
+      make1D("hTimingTruthMinusLaterFirstSTFoilTime",
+             "Selected event timing residual for later first ST_Foils track;t_{truth} - t_{later first ST} [ns];events",
+             config.timingResolutionBins,
+             config.timingResolutionMin,
+             config.timingResolutionMax);
+    book.timingTruthMinusAverageFirstSTFoilTime =
+      make1D("hTimingTruthMinusAverageFirstSTFoilTime",
+             "Selected event timing residual using average first ST_Foils time;t_{truth} - #LTt_{first ST}#GT [ns];events",
+             config.timingResolutionBins,
+             config.timingResolutionMin,
+             config.timingResolutionMax);
+    book.timingTruthMinusEarlierVsLaterFirstSTFoilTime =
+      make2D("hTimingTruthMinusEarlierVsLaterFirstSTFoilTime",
+             "Selected event timing residuals;t_{truth} - t_{earlier first ST} [ns];t_{truth} - t_{later first ST} [ns]",
+             config.timingResolutionBins,
+             config.timingResolutionMin,
+             config.timingResolutionMax,
+             config.timingResolutionBins,
+             config.timingResolutionMin,
+             config.timingResolutionMax);
 
     book.recoVertexX =
       make1D("hRecoTwoElectronVertexX",
@@ -911,6 +973,56 @@ namespace twoelectronhist
 
     book.recoMomentum->Fill(momentum);
     ++book.recoMomentumEntries;
+  }
+
+  inline void fillSelectedEventTimingDiagnostics(
+    HistogramBook& book,
+    double truthOriginTime,
+    double firstTrackFirstSTFoilTime,
+    double secondTrackFirstSTFoilTime)
+  {
+    if (!std::isfinite(truthOriginTime) ||
+        !std::isfinite(firstTrackFirstSTFoilTime) ||
+        !std::isfinite(secondTrackFirstSTFoilTime))
+    {
+      return;
+    }
+
+    const double earlierFirstSTFoilTime =
+      std::min(firstTrackFirstSTFoilTime, secondTrackFirstSTFoilTime);
+    const double laterFirstSTFoilTime =
+      std::max(firstTrackFirstSTFoilTime, secondTrackFirstSTFoilTime);
+    const double averageFirstSTFoilTime =
+      0.5 * (firstTrackFirstSTFoilTime + secondTrackFirstSTFoilTime);
+    const double firstSTFoilDeltaT =
+      laterFirstSTFoilTime - earlierFirstSTFoilTime;
+    const double truthMinusEarlierFirstSTFoilTime =
+      truthOriginTime - earlierFirstSTFoilTime;
+    const double truthMinusLaterFirstSTFoilTime =
+      truthOriginTime - laterFirstSTFoilTime;
+    const double truthMinusAverageFirstSTFoilTime =
+      truthOriginTime - averageFirstSTFoilTime;
+
+    book.timingSelectedEventTruthOriginTime->Fill(truthOriginTime);
+    ++book.timingSelectedEventTruthOriginTimeEntries;
+
+    book.timingSelectedTrackFirstSTFoilTime->Fill(firstTrackFirstSTFoilTime);
+    book.timingSelectedTrackFirstSTFoilTime->Fill(secondTrackFirstSTFoilTime);
+    book.timingSelectedTrackFirstSTFoilTimeEntries += 2;
+
+    book.timingSelectedTrackFirstSTFoilDeltaT->Fill(firstSTFoilDeltaT);
+    ++book.timingSelectedTrackFirstSTFoilDeltaTEntries;
+
+    book.timingTruthMinusEarlierFirstSTFoilTime->Fill(
+      truthMinusEarlierFirstSTFoilTime);
+    book.timingTruthMinusLaterFirstSTFoilTime->Fill(
+      truthMinusLaterFirstSTFoilTime);
+    book.timingTruthMinusAverageFirstSTFoilTime->Fill(
+      truthMinusAverageFirstSTFoilTime);
+    book.timingTruthMinusEarlierVsLaterFirstSTFoilTime->Fill(
+      truthMinusEarlierFirstSTFoilTime,
+      truthMinusLaterFirstSTFoilTime);
+    ++book.timingTruthMinusFirstSTFoilEntries;
   }
 
   inline double momentumPolarTheta(const twoparticlevertexer::Line3D& line)
@@ -1620,6 +1732,13 @@ namespace twoelectronhist
     writeOne(book.mcTruthOriginYZ);
     writeOne(book.mcTruthMomentum);
     writeOne(book.recoMomentum);
+    writeOne(book.timingSelectedEventTruthOriginTime);
+    writeOne(book.timingSelectedTrackFirstSTFoilTime);
+    writeOne(book.timingSelectedTrackFirstSTFoilDeltaT);
+    writeOne(book.timingTruthMinusEarlierFirstSTFoilTime);
+    writeOne(book.timingTruthMinusLaterFirstSTFoilTime);
+    writeOne(book.timingTruthMinusAverageFirstSTFoilTime);
+    writeOne(book.timingTruthMinusEarlierVsLaterFirstSTFoilTime);
     writeOne(book.recoVertexX);
     writeOne(book.recoVertexY);
     writeOne(book.recoVertexZ);
