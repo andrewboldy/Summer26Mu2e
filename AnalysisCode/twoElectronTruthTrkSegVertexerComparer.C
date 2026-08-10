@@ -68,7 +68,7 @@
 //
 //   The output file name is controlled by HISTOGRAM_OUTPUT_FILE near the top of
 //   the implementation.  The PDF plots are written under
-//   Plots/GoodTimingData/TruthVsRecoPlots/.
+//   Plots/GoodTimingData/2ndRun/TruthVsRecoPlots/.
 //
 // Vertexing process:
 //   The vertexing part of this comparer is intentionally built from stored
@@ -226,7 +226,7 @@ namespace
   static const char* HISTOGRAM_OUTPUT_FILE =
     "twoElectronTruthTrkSegVertexerComparer_histograms.root";
   static const char* HISTOGRAM_PLOT_OUTPUT_DIR =
-    "Plots/GoodTimingData/TruthVsRecoPlots";
+    "Plots/GoodTimingData/2ndRun/TruthVsRecoPlots";
 
   // Current 37-foil stopping-target geometry used by the recent run-1/phase-1
   // geometry files:

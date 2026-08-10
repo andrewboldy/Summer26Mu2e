@@ -16,7 +16,7 @@
 //   afterwards and produces human-readable PDFs under categorized
 //   subdirectories in:
 //
-//       Plots/GoodTimingData/TruthVsRecoPlots/
+//       Plots/GoodTimingData/2ndRun/TruthVsRecoPlots/
 //
 //   That keeps the event loop simple and makes it easy to regenerate plots
 //   without rerunning the full ntuple scan once the histogram file exists.
@@ -980,7 +980,7 @@ namespace twoelectronplots
 
   inline bool saveTruthVsRecoPlotsFromFile(const std::string& histogramFileName,
                                            const std::string& outputDirectory =
-                                             "Plots/GoodTimingData/TruthVsRecoPlots")
+                                             "Plots/GoodTimingData/2ndRun/TruthVsRecoPlots")
   {
     TFile* histogramFile = TFile::Open(histogramFileName.c_str(), "READ");
     if (histogramFile == nullptr || histogramFile->IsZombie())
@@ -1905,4 +1905,3 @@ namespace twoelectronplots
 }
 
 #endif
-
