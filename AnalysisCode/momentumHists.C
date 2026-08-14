@@ -2,8 +2,7 @@
 //
 // Plot reconstructed TT_Mid trkseg momentum through the same progressive cuts
 // used by twoElectronTruthTrkSegVertexerComparer.C, overlaid with rank-0
-// downstream-electron trkmcsim truth.  The left pad is linear and the right pad
-// is logarithmic.
+// downstream-electron trkmcsim truth on a logarithmic scale.
 //
 // ROOT usage:
 //   .L CreatedCode/momentumHists.C+
@@ -115,30 +114,35 @@ namespace momentum_hists_detail
     histogram.SetLineStyle(lineStyle);
     histogram.SetLineWidth(lineWidth);
     histogram.SetFillStyle(0);
+    histogram.SetMarkerStyle(1);
+    histogram.SetMarkerSize(0.0);
     histogram.SetStats(false);
   }
 
   void drawPad(TH1D& truth, TH1D& allReco, TH1D& twoTracks,
-               TH1D& goodCalo, TH1D& momentumCut, bool logarithmic)
+               TH1D& goodCalo, TH1D& momentumCut)
   {
     gPad->SetTicks(1, 1);
-    gPad->SetLeftMargin(0.12);
-    gPad->SetRightMargin(0.04);
-    gPad->SetBottomMargin(0.12);
-    gPad->SetLogy(logarithmic);
+    gPad->SetGridy(true);
+    gPad->SetLeftMargin(0.11);
+    gPad->SetRightMargin(0.035);
+    gPad->SetBottomMargin(0.11);
+    gPad->SetTopMargin(0.07);
+    gPad->SetLogy(true);
 
     const double maximum = max({truth.GetMaximum(), allReco.GetMaximum(),
                                 twoTracks.GetMaximum(), goodCalo.GetMaximum(),
                                 momentumCut.GetMaximum()});
-    const double yMinimum = logarithmic ? 0.5 : 0.0;
-    const double yMaximum = maximum > 0.0
-                              ? maximum * (logarithmic ? 8.0 : 1.25)
-                              : 1.0;
-    const char* title = logarithmic
-                          ? "Momentum cut progression (log scale);Momentum [MeV/c];Tracks"
-                          : "Momentum cut progression;Momentum [MeV/c];Tracks";
-    TH1F* frame = gPad->DrawFrame(30.0, yMinimum, 60.0, yMaximum, title);
+    const double yMinimum = 0.5;
+    const double yMaximum = maximum > 0.0 ? maximum * 10.0 : 1.0;
+    TH1F* frame = gPad->DrawFrame(
+      30.0, yMinimum, 60.0, yMaximum,
+      "Reconstructed momentum cut progression;Momentum [MeV/c];Tracks");
     frame->SetStats(false);
+    frame->GetXaxis()->SetTitleSize(0.045);
+    frame->GetYaxis()->SetTitleSize(0.045);
+    frame->GetXaxis()->SetLabelSize(0.038);
+    frame->GetYaxis()->SetLabelSize(0.038);
 
     // Draw truth first as the common reference, then all reconstructed stages.
     truth.Draw("HIST SAME");
@@ -148,10 +152,10 @@ namespace momentum_hists_detail
     momentumCut.Draw("HIST SAME");
 
     // Upper-left avoids the expected signal peak near 52 MeV/c.
-    TLegend* legend = new TLegend(0.14, 0.64, 0.55, 0.89);
+    TLegend* legend = new TLegend(0.13, 0.68, 0.53, 0.91);
     legend->SetBorderSize(0);
     legend->SetFillStyle(0);
-    legend->SetTextSize(0.031);
+    legend->SetTextSize(0.030);
     legend->AddEntry(&truth, "trkmcsim truth (rank 0 e^{-})", "l");
     legend->AddEntry(&allReco, "All reco downstream e^{-} tracks", "l");
     legend->AddEntry(&twoTracks, "Exactly two tracks", "l");
@@ -214,18 +218,19 @@ void momentumHists(const string& inputName,
   ntuple.SetBranchAddress(simBranch.c_str(), &truthByTrack);
   ntuple.SetBranchAddress(caloBranch.c_str(), &caloHits);
 
-  const int nBins = 120; // 0.25 MeV/c per bin from 30 to 60 MeV/c.
+  const int nBins = 60; // 0.5 MeV/c per bin keeps low-statistics curves readable.
   TH1D hTruth("hTruthMomentum", "", nBins, 30.0, 60.0);
   TH1D hAllReco("hAllRecoMomentum", "", nBins, 30.0, 60.0);
   TH1D hExactlyTwo("hExactlyTwoMomentum", "", nBins, 30.0, 60.0);
   TH1D hGoodCalo("hGoodCaloMomentum", "", nBins, 30.0, 60.0);
   TH1D hMomentumCut("hMomentumCut", "", nBins, 30.0, 60.0);
 
-  styleHistogram(hTruth, kBlack, 1, 4);
-  styleHistogram(hAllReco, kGray + 2, 2);
-  styleHistogram(hExactlyTwo, kBlue + 1, 1);
-  styleHistogram(hGoodCalo, kOrange + 7, 1);
-  styleHistogram(hMomentumCut, kRed + 1, 1, 4);
+  // Solid, high-contrast step lines; thin enough to keep overlaps readable.
+  styleHistogram(hTruth, kBlack, 1, 2);
+  styleHistogram(hAllReco, kCyan + 2, 1, 2);
+  styleHistogram(hExactlyTwo, kBlue + 1, 1, 2);
+  styleHistogram(hGoodCalo, kOrange + 7, 1, 2);
+  styleHistogram(hMomentumCut, kRed + 1, 1, 2);
 
   Long64_t eventsExactlyTwo = 0;
   Long64_t eventsGoodCalo = 0;
@@ -308,12 +313,9 @@ void momentumHists(const string& inputName,
   const int oldOptStat = gStyle->GetOptStat();
   gROOT->SetBatch(true);
   gStyle->SetOptStat(0);
-  TCanvas canvas("cMomentumHists", "Momentum histograms", 1500, 650);
-  canvas.Divide(2, 1, 0.008, 0.008);
-  canvas.cd(1);
-  drawPad(hTruth, hAllReco, hExactlyTwo, hGoodCalo, hMomentumCut, false);
-  canvas.cd(2);
-  drawPad(hTruth, hAllReco, hExactlyTwo, hGoodCalo, hMomentumCut, true);
+  TCanvas canvas("cMomentumHists", "Momentum histograms", 1050, 750);
+  canvas.cd();
+  drawPad(hTruth, hAllReco, hExactlyTwo, hGoodCalo, hMomentumCut);
   canvas.SaveAs(plotOutputName.c_str());
   gStyle->SetOptStat(oldOptStat);
   gROOT->SetBatch(oldBatch);
