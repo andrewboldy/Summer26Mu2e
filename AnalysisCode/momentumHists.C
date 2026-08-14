@@ -228,7 +228,7 @@ void momentumHists(const string& inputName,
   TH1D hTrackerMiddleTimeDifference(
     "hTrackerMiddleTimeDifference",
     "Candidate-track time difference at TT_Mid;|#Delta t_{TT_Mid}| [ns];Candidate events",
-    200, 0.0, 2000.0);
+    60, 0.0, 60.0);
 
   // Solid, high-contrast step lines; thin enough to keep overlaps readable.
   styleHistogram(hTruth, kBlack, 1, 2);
