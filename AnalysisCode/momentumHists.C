@@ -13,6 +13,7 @@
 //   momentumHists("files.txt", "trk", "other.pdf")
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -224,6 +225,10 @@ void momentumHists(const string& inputName,
   TH1D hExactlyTwo("hExactlyTwoMomentum", "", nBins, 30.0, 60.0);
   TH1D hGoodCalo("hGoodCaloMomentum", "", nBins, 30.0, 60.0);
   TH1D hMomentumCut("hMomentumCut", "", nBins, 30.0, 60.0);
+  TH1D hTrackerMiddleTimeDifference(
+    "hTrackerMiddleTimeDifference",
+    "Candidate-track time difference at TT_Mid;|#Delta t_{TT_Mid}| [ns];Candidate events",
+    200, 0.0, 2000.0);
 
   // Solid, high-contrast step lines; thin enough to keep overlaps readable.
   styleHistogram(hTruth, kBlack, 1, 2);
@@ -231,10 +236,12 @@ void momentumHists(const string& inputName,
   styleHistogram(hExactlyTwo, kBlue + 1, 1, 2);
   styleHistogram(hGoodCalo, kOrange + 7, 1, 2);
   styleHistogram(hMomentumCut, kRed + 1, 1, 2);
+  styleHistogram(hTrackerMiddleTimeDifference, kViolet + 1, 1, 2);
 
   Long64_t eventsExactlyTwo = 0;
   Long64_t eventsGoodCalo = 0;
   Long64_t eventsMomentumCut = 0;
+  Long64_t trackerMiddleTimeDifferences = 0;
 
   for (Long64_t entry = 0; entry < ntuple.GetEntries(); ++entry)
   {
@@ -262,6 +269,7 @@ void momentumHists(const string& inputName,
 
     vector<size_t> selectedIndices;
     vector<double> selectedMomenta;
+    vector<double> selectedMiddleTimes;
     const size_t nTracks = min(tracks->size(), segmentsByTrack->size());
     for (size_t iTrack = 0; iTrack < nTracks; ++iTrack)
     {
@@ -280,6 +288,7 @@ void momentumHists(const string& inputName,
       hAllReco.Fill(momentum);
       selectedIndices.push_back(iTrack);
       selectedMomenta.push_back(momentum);
+      selectedMiddleTimes.push_back(middle->time);
     }
 
     if (selectedIndices.size() != 2)
@@ -307,6 +316,17 @@ void momentumHists(const string& inputName,
     ++eventsMomentumCut;
     hMomentumCut.Fill(selectedMomenta[0]);
     hMomentumCut.Fill(selectedMomenta[1]);
+
+    // This timing measurement is reconstruction-only.  The same reconstructed
+    // downstream-electron definition and progressive candidate cuts used above
+    // select the tracks; their TrkSegInfo objects provide the TT_Mid times.
+    if (std::isfinite(selectedMiddleTimes[0]) &&
+        std::isfinite(selectedMiddleTimes[1]))
+    {
+      hTrackerMiddleTimeDifference.Fill(
+        fabs(selectedMiddleTimes[0] - selectedMiddleTimes[1]));
+      ++trackerMiddleTimeDifferences;
+    }
   }
 
   const bool oldBatch = gROOT->IsBatch();
@@ -317,6 +337,20 @@ void momentumHists(const string& inputName,
   canvas.cd();
   drawPad(hTruth, hAllReco, hExactlyTwo, hGoodCalo, hMomentumCut);
   canvas.SaveAs(plotOutputName.c_str());
+
+  TCanvas timeCanvas("cTrackerMiddleTimeDifference",
+                     "Tracker-middle time difference", 900, 700);
+  timeCanvas.SetTicks(1, 1);
+  timeCanvas.SetGridy(true);
+  timeCanvas.SetLeftMargin(0.12);
+  timeCanvas.SetBottomMargin(0.12);
+  hTrackerMiddleTimeDifference.GetXaxis()->SetTitleSize(0.045);
+  hTrackerMiddleTimeDifference.GetYaxis()->SetTitleSize(0.045);
+  hTrackerMiddleTimeDifference.GetXaxis()->SetLabelSize(0.038);
+  hTrackerMiddleTimeDifference.GetYaxis()->SetLabelSize(0.038);
+  hTrackerMiddleTimeDifference.Draw("HIST");
+  const string timePlotOutputName = defaultOutputDirectory + "/trkTimeDiff.pdf";
+  timeCanvas.SaveAs(timePlotOutputName.c_str());
   gStyle->SetOptStat(oldOptStat);
   gROOT->SetBatch(oldBatch);
 
@@ -324,6 +358,9 @@ void momentumHists(const string& inputName,
   cout << "Exactly-two-track events: " << eventsExactlyTwo << endl;
   cout << "After good-calo cut: " << eventsGoodCalo << endl;
   cout << "After 50-53 MeV/c cut: " << eventsMomentumCut << endl;
+  cout << "Reconstructed TT_Mid time differences: "
+       << trackerMiddleTimeDifferences << endl;
   cout << "Wrote " << plotOutputName << endl;
+  cout << "Wrote " << timePlotOutputName << endl;
 }
 
