@@ -2266,6 +2266,10 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
           twoelectronhist::fillRecoVertexMinTimeTruthResidualTest(
             histograms,
             truthToReco);
+          twoelectronhist::fillRecoVertexMinTimeDeltaTVsTruthDeltaZTest(
+            histograms,
+            timeSelectedPairVertex,
+            truthToReco.z());
           fillSharedFoilDeltaZScatterDiagnostics(
             histograms,
             timeSelectedPairVertex,
@@ -2529,6 +2533,8 @@ void twoElectronTruthTrkSegVertexerComparer(const string& inputName,
        << histograms.testRecoVertexMinTimeFoilIndexMatchedEntries << endl;
   cout << "  histogram TEST minimum-time vertex delta-t entries: "
        << histograms.recoVertexMinTimeDifferenceEntries << endl;
+  cout << "  histogram TEST minimum-time delta-t vs reconstructed-truth z residual entries: "
+       << histograms.testRecoVertexMinTimeDeltaTVsTruthDeltaZEntries << endl;
   cout << "  histogram TEST minimum-time reconstructed-vs-truth vertex residual entries: "
        << histograms.testRecoVertexMinTimeTruthResidualEntries << endl;
   cout << "  histogram TEST foil-index matched minimum-time reconstructed-vs-truth vertex residual entries: "

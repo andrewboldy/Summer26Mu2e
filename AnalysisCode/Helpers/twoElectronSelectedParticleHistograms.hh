@@ -177,6 +177,7 @@ namespace twoelectronhist
     TH2F* recoTrackMultiplicityVsDeltaZ = nullptr;
     TH1F* recoVertexSelectedSegmentDeltaTTest = nullptr;
     TH1F* recoVertexMinTimeDifferenceTest = nullptr;
+    TH2F* testRecoVertexMinTimeDeltaTVsTruthDeltaZ = nullptr;
     TGraph* recoAllSharedFoilCandidateMaxLvsDeltaZ = nullptr;
     TGraph* recoSpaceSelectedSharedFoilMaxLvsDeltaZ = nullptr;
     TGraph* recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ = nullptr;
@@ -239,6 +240,7 @@ namespace twoelectronhist
     Long64_t recoTrackMultiplicityVsDeltaZEntries = 0;
     Long64_t recoVertexSelectedSegmentDeltaTEntries = 0;
     Long64_t recoVertexMinTimeDifferenceEntries = 0;
+    Long64_t testRecoVertexMinTimeDeltaTVsTruthDeltaZEntries = 0;
     Long64_t recoAllSharedFoilCandidateMaxLvsDeltaZEntries = 0;
     Long64_t recoSpaceSelectedSharedFoilMaxLvsDeltaZEntries = 0;
     Long64_t recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZEntries = 0;
@@ -578,6 +580,15 @@ namespace twoelectronhist
              config.timeDifferenceBins,
              config.timeDifferenceMin,
              config.timeDifferenceMax);
+    book.testRecoVertexMinTimeDeltaTVsTruthDeltaZ =
+      make2D("hTESTRecoTwoElectronVertexMinTimeDeltaTVsTruthDeltaZ",
+             "TEST: time-selected shared ST_Foils pair;#Delta t_{selected} [ns];z_{reco}-z_{truth} [mm]",
+             config.timeDifferenceBins,
+             config.timeDifferenceMin,
+             config.timeDifferenceMax,
+             config.deltaZByFoilBins,
+             config.recoTruthDeltaZMin,
+             config.recoTruthDeltaZMax);
     book.recoAllSharedFoilCandidateMaxLvsDeltaZ =
       makeGraph("gRecoAllSharedFoilCandidateMaxLvsDeltaZ",
                 "All shared same-foil candidate pairs;max(L_{1}, L_{2}) [mm];#Delta z_{reco-truth} [mm]");
@@ -1197,6 +1208,26 @@ namespace twoelectronhist
     ++book.recoVertexMinTimeDifferenceEntries;
   }
 
+  // Both inputs are from the same time-selected vertex: the shared ST_Foils
+  // pair with minimum |deltaInputTime|.  This deliberately does not use the
+  // space-selected pair.
+  inline void fillRecoVertexMinTimeDeltaTVsTruthDeltaZTest(
+    HistogramBook& book,
+    const twoparticlevertexer::VertexResult& vertex,
+    double recoMinusTruthZ)
+  {
+    if (!vertex.valid || !std::isfinite(vertex.deltaInputTime) ||
+        !std::isfinite(recoMinusTruthZ))
+    {
+      return;
+    }
+
+    book.testRecoVertexMinTimeDeltaTVsTruthDeltaZ->Fill(
+      vertex.deltaInputTime,
+      recoMinusTruthZ);
+    ++book.testRecoVertexMinTimeDeltaTVsTruthDeltaZEntries;
+  }
+
   inline bool validMaxLvsDeltaZInputs(double maxPointTruthDistance,
                                       double recoMinusTruthZ)
   {
@@ -1760,6 +1791,7 @@ namespace twoelectronhist
     writeOne(book.recoTrackMultiplicityVsDeltaZ);
     writeOne(book.recoVertexSelectedSegmentDeltaTTest);
     writeOne(book.recoVertexMinTimeDifferenceTest);
+    writeOne(book.testRecoVertexMinTimeDeltaTVsTruthDeltaZ);
     writeOne(book.recoAllSharedFoilCandidateMaxLvsDeltaZ);
     writeOne(book.recoSpaceSelectedSharedFoilMaxLvsDeltaZ);
     writeOne(book.recoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ);

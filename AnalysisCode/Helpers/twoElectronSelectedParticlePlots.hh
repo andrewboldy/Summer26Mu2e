@@ -1127,6 +1127,9 @@ namespace twoelectronplots
     TH1F* hRecoVertexMinTimeDifferenceTest = get1DHistogram(
       *histogramFile,
       "hTESTRecoTwoElectronVertexMinTimeDifference");
+    TH2F* hTestRecoVertexMinTimeDeltaTVsTruthDeltaZ = get2DHistogram(
+      *histogramFile,
+      "hTESTRecoTwoElectronVertexMinTimeDeltaTVsTruthDeltaZ");
     TGraph* gRecoAllSharedFoilCandidateMaxLvsDeltaZ = getGraph(
       *histogramFile,
       "gRecoAllSharedFoilCandidateMaxLvsDeltaZ");
@@ -1329,6 +1332,7 @@ namespace twoelectronplots
         hRecoVertexFoilIndexMatchedTruthDistance == nullptr ||
         hRecoVertexSelectedSegmentDeltaTTest == nullptr ||
         hRecoVertexMinTimeDifferenceTest == nullptr ||
+        hTestRecoVertexMinTimeDeltaTVsTruthDeltaZ == nullptr ||
         gRecoAllSharedFoilCandidateMaxLvsDeltaZ == nullptr ||
         gRecoSpaceSelectedSharedFoilMaxLvsDeltaZ == nullptr ||
         gRecoAllSharedFoilCandidateAvgAbsLineParameterVsDeltaZ == nullptr ||
@@ -1730,6 +1734,16 @@ namespace twoelectronplots
     cRecoVertexMinTimeDifferenceTest.SaveAs(
       (timingPlotsDirectory + "/RecoVertexMinTimeDifference_TEST.pdf").c_str());
 
+    TCanvas cTestRecoVertexMinTimeDeltaTVsTruthDeltaZ(
+      "cTestRecoVertexMinTimeDeltaTVsTruthDeltaZ",
+      "Time-selected intersection #Delta t versus vertex z resolution",
+      1000,
+      800);
+    draw2DHistogram(hTestRecoVertexMinTimeDeltaTVsTruthDeltaZ);
+    cTestRecoVertexMinTimeDeltaTVsTruthDeltaZ.SaveAs(
+      (timingPlotsDirectory +
+       "/RecoVertexMinTimeDeltaTVsTruthDeltaZ_TEST.pdf").c_str());
+
     TCanvas cRecoSharedFoilMaxLvsDeltaZ(
       "cRecoSharedFoilMaxLvsDeltaZ",
       "Shared same-foil pair choices: #Delta z vs max(L_{1}, L_{2})",
@@ -1905,3 +1919,4 @@ namespace twoelectronplots
 }
 
 #endif
+
