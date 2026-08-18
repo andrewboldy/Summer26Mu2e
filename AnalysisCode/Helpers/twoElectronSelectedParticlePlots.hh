@@ -37,6 +37,7 @@
 #include <TH1F.h>
 #include <TH2F.h>
 #include <TLegend.h>
+#include <TPad.h>
 #include <TSystem.h>
 
 namespace twoelectronplots
@@ -1743,6 +1744,40 @@ namespace twoelectronplots
     cTestRecoVertexMinTimeDeltaTVsTruthDeltaZ.SaveAs(
       (timingPlotsDirectory +
        "/RecoVertexMinTimeDeltaTVsTruthDeltaZ_TEST.pdf").c_str());
+
+    // These are alternate visualizations of the identical time-selected
+    // histogram above.  The axes remain delta-t and reco-minus-truth z; only
+    // the display changes, so neither view can accidentally use the
+    // space-selected intersection.
+    TCanvas cTestRecoVertexMinTimeDeltaTVsTruthDeltaZSurface(
+      "cTestRecoVertexMinTimeDeltaTVsTruthDeltaZSurface",
+      "Time-selected delta-t versus vertex z resolution: surface view",
+      1100,
+      850);
+    drawDeltaZBySelectedFoilSurfaceView(
+      *hTestRecoVertexMinTimeDeltaTVsTruthDeltaZ,
+      "Time-selected intersection: #Delta t vs z resolution;#Delta t_{selected} [ns];z_{reco}-z_{truth} [mm];entries",
+      "SURF2",
+      30.0,
+      35.0,
+      true);
+    cTestRecoVertexMinTimeDeltaTVsTruthDeltaZSurface.SaveAs(
+      (timingPlotsDirectory +
+       "/RecoVertexMinTimeDeltaTVsTruthDeltaZ_Surface_TEST.pdf").c_str());
+
+    TCanvas cTestRecoVertexMinTimeDeltaTVsTruthDeltaZLogZ(
+      "cTestRecoVertexMinTimeDeltaTVsTruthDeltaZLogZ",
+      "Time-selected delta-t versus vertex z resolution: logarithmic color scale",
+      1000,
+      800);
+    if (gPad != nullptr)
+    {
+      gPad->SetLogz();
+    }
+    draw2DHistogram(hTestRecoVertexMinTimeDeltaTVsTruthDeltaZ);
+    cTestRecoVertexMinTimeDeltaTVsTruthDeltaZLogZ.SaveAs(
+      (timingPlotsDirectory +
+       "/RecoVertexMinTimeDeltaTVsTruthDeltaZ_LogZ_TEST.pdf").c_str());
 
     TCanvas cRecoSharedFoilMaxLvsDeltaZ(
       "cRecoSharedFoilMaxLvsDeltaZ",
