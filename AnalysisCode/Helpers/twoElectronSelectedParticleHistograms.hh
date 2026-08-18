@@ -578,8 +578,8 @@ namespace twoelectronhist
       make1D("hTESTRecoTwoElectronVertexMinTimeDifference",
              "TEST: minimum-|#Delta t| shared ST_Foils pair time difference;#Delta t [ns];entries",
              config.timeDifferenceBins,
-             config.timeDifferenceMin,
-             config.timeDifferenceMax);
+             -100.0,
+             100.0);
     book.testRecoVertexMinTimeDeltaTVsTruthDeltaZ =
       make2D("hTESTRecoTwoElectronVertexMinTimeDeltaTVsTruthDeltaZ",
              "TEST: time-selected shared ST_Foils pair;#Delta t_{selected} [ns];z_{reco}-z_{truth} [mm]",
@@ -587,8 +587,8 @@ namespace twoelectronhist
              -100.0,
              100.0,
              config.deltaZByFoilBins,
-             -100.0,
-             100.0);
+             config.recoTruthDeltaZMin,
+             config.recoTruthDeltaZMax);
     book.recoAllSharedFoilCandidateMaxLvsDeltaZ =
       makeGraph("gRecoAllSharedFoilCandidateMaxLvsDeltaZ",
                 "All shared same-foil candidate pairs;max(L_{1}, L_{2}) [mm];#Delta z_{reco-truth} [mm]");
@@ -1863,3 +1863,4 @@ namespace twoelectronhist
 }
 
 #endif
+
